@@ -39,15 +39,6 @@ pub struct VmafModelConfig {
     pub name: *const ::std::os::raw::c_char,
     pub flags: u64,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of VmafModelConfig"][::std::mem::size_of::<VmafModelConfig>() - 16usize];
-    ["Alignment of VmafModelConfig"][::std::mem::align_of::<VmafModelConfig>() - 8usize];
-    ["Offset of field: VmafModelConfig::name"]
-        [::std::mem::offset_of!(VmafModelConfig, name) - 0usize];
-    ["Offset of field: VmafModelConfig::flags"]
-        [::std::mem::offset_of!(VmafModelConfig, flags) - 8usize];
-};
 unsafe extern "C" {
     pub fn vmaf_model_load(
         model: *mut *mut VmafModel,
@@ -106,60 +97,6 @@ pub struct VmafModelCollectionScore__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1 {
     pub lo: f64,
     pub hi: f64,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of VmafModelCollectionScore__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1"]
-        [::std::mem::size_of::<VmafModelCollectionScore__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1>(
-        ) - 16usize];
-    ["Alignment of VmafModelCollectionScore__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1"]
-        [::std::mem::align_of::<VmafModelCollectionScore__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1>(
-        ) - 8usize];
-    ["Offset of field: VmafModelCollectionScore__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1::lo"][::std::mem::offset_of!(
-        VmafModelCollectionScore__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1,
-        lo
-    )
-        - 0usize];
-    ["Offset of field: VmafModelCollectionScore__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1::hi"][::std::mem::offset_of!(
-        VmafModelCollectionScore__bindgen_ty_1__bindgen_ty_1__bindgen_ty_1,
-        hi
-    )
-        - 8usize];
-};
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of VmafModelCollectionScore__bindgen_ty_1__bindgen_ty_1"]
-        [::std::mem::size_of::<VmafModelCollectionScore__bindgen_ty_1__bindgen_ty_1>() - 16usize];
-    ["Alignment of VmafModelCollectionScore__bindgen_ty_1__bindgen_ty_1"]
-        [::std::mem::align_of::<VmafModelCollectionScore__bindgen_ty_1__bindgen_ty_1>() - 8usize];
-    ["Offset of field: VmafModelCollectionScore__bindgen_ty_1__bindgen_ty_1::p95"][::std::mem::offset_of!(
-        VmafModelCollectionScore__bindgen_ty_1__bindgen_ty_1,
-        p95
-    ) - 0usize];
-};
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of VmafModelCollectionScore__bindgen_ty_1"]
-        [::std::mem::size_of::<VmafModelCollectionScore__bindgen_ty_1>() - 32usize];
-    ["Alignment of VmafModelCollectionScore__bindgen_ty_1"]
-        [::std::mem::align_of::<VmafModelCollectionScore__bindgen_ty_1>() - 8usize];
-    ["Offset of field: VmafModelCollectionScore__bindgen_ty_1::bagging_score"]
-        [::std::mem::offset_of!(VmafModelCollectionScore__bindgen_ty_1, bagging_score) - 0usize];
-    ["Offset of field: VmafModelCollectionScore__bindgen_ty_1::stddev"]
-        [::std::mem::offset_of!(VmafModelCollectionScore__bindgen_ty_1, stddev) - 8usize];
-    ["Offset of field: VmafModelCollectionScore__bindgen_ty_1::ci"]
-        [::std::mem::offset_of!(VmafModelCollectionScore__bindgen_ty_1, ci) - 16usize];
-};
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of VmafModelCollectionScore"]
-        [::std::mem::size_of::<VmafModelCollectionScore>() - 40usize];
-    ["Alignment of VmafModelCollectionScore"]
-        [::std::mem::align_of::<VmafModelCollectionScore>() - 8usize];
-    ["Offset of field: VmafModelCollectionScore::type_"]
-        [::std::mem::offset_of!(VmafModelCollectionScore, type_) - 0usize];
-    ["Offset of field: VmafModelCollectionScore::bootstrap"]
-        [::std::mem::offset_of!(VmafModelCollectionScore, bootstrap) - 8usize];
-};
 unsafe extern "C" {
     pub fn vmaf_model_collection_load(
         model: *mut *mut VmafModel,
@@ -210,20 +147,6 @@ pub struct VmafPicture {
     pub ref_: *mut VmafRef,
     pub priv_: *mut ::std::os::raw::c_void,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of VmafPicture"][::std::mem::size_of::<VmafPicture>() - 96usize];
-    ["Alignment of VmafPicture"][::std::mem::align_of::<VmafPicture>() - 8usize];
-    ["Offset of field: VmafPicture::pix_fmt"]
-        [::std::mem::offset_of!(VmafPicture, pix_fmt) - 0usize];
-    ["Offset of field: VmafPicture::bpc"][::std::mem::offset_of!(VmafPicture, bpc) - 4usize];
-    ["Offset of field: VmafPicture::w"][::std::mem::offset_of!(VmafPicture, w) - 8usize];
-    ["Offset of field: VmafPicture::h"][::std::mem::offset_of!(VmafPicture, h) - 20usize];
-    ["Offset of field: VmafPicture::stride"][::std::mem::offset_of!(VmafPicture, stride) - 32usize];
-    ["Offset of field: VmafPicture::data"][::std::mem::offset_of!(VmafPicture, data) - 56usize];
-    ["Offset of field: VmafPicture::ref_"][::std::mem::offset_of!(VmafPicture, ref_) - 80usize];
-    ["Offset of field: VmafPicture::priv_"][::std::mem::offset_of!(VmafPicture, priv_) - 88usize];
-};
 unsafe extern "C" {
     pub fn vmaf_picture_alloc(
         pic: *mut VmafPicture,
@@ -265,21 +188,6 @@ pub struct VmafConfiguration {
     pub cpumask: u64,
     pub gpumask: u64,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of VmafConfiguration"][::std::mem::size_of::<VmafConfiguration>() - 32usize];
-    ["Alignment of VmafConfiguration"][::std::mem::align_of::<VmafConfiguration>() - 8usize];
-    ["Offset of field: VmafConfiguration::log_level"]
-        [::std::mem::offset_of!(VmafConfiguration, log_level) - 0usize];
-    ["Offset of field: VmafConfiguration::n_threads"]
-        [::std::mem::offset_of!(VmafConfiguration, n_threads) - 4usize];
-    ["Offset of field: VmafConfiguration::n_subsample"]
-        [::std::mem::offset_of!(VmafConfiguration, n_subsample) - 8usize];
-    ["Offset of field: VmafConfiguration::cpumask"]
-        [::std::mem::offset_of!(VmafConfiguration, cpumask) - 16usize];
-    ["Offset of field: VmafConfiguration::gpumask"]
-        [::std::mem::offset_of!(VmafConfiguration, gpumask) - 24usize];
-};
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct VmafContext {
@@ -404,32 +312,6 @@ pub struct VmafPictureConfiguration__bindgen_ty_1 {
     pub bpc: ::std::os::raw::c_uint,
     pub pix_fmt: VmafPixelFormat,
 }
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of VmafPictureConfiguration__bindgen_ty_1"]
-        [::std::mem::size_of::<VmafPictureConfiguration__bindgen_ty_1>() - 16usize];
-    ["Alignment of VmafPictureConfiguration__bindgen_ty_1"]
-        [::std::mem::align_of::<VmafPictureConfiguration__bindgen_ty_1>() - 4usize];
-    ["Offset of field: VmafPictureConfiguration__bindgen_ty_1::w"]
-        [::std::mem::offset_of!(VmafPictureConfiguration__bindgen_ty_1, w) - 0usize];
-    ["Offset of field: VmafPictureConfiguration__bindgen_ty_1::h"]
-        [::std::mem::offset_of!(VmafPictureConfiguration__bindgen_ty_1, h) - 4usize];
-    ["Offset of field: VmafPictureConfiguration__bindgen_ty_1::bpc"]
-        [::std::mem::offset_of!(VmafPictureConfiguration__bindgen_ty_1, bpc) - 8usize];
-    ["Offset of field: VmafPictureConfiguration__bindgen_ty_1::pix_fmt"]
-        [::std::mem::offset_of!(VmafPictureConfiguration__bindgen_ty_1, pix_fmt) - 12usize];
-};
-#[allow(clippy::unnecessary_operation, clippy::identity_op)]
-const _: () = {
-    ["Size of VmafPictureConfiguration"]
-        [::std::mem::size_of::<VmafPictureConfiguration>() - 20usize];
-    ["Alignment of VmafPictureConfiguration"]
-        [::std::mem::align_of::<VmafPictureConfiguration>() - 4usize];
-    ["Offset of field: VmafPictureConfiguration::pic_params"]
-        [::std::mem::offset_of!(VmafPictureConfiguration, pic_params) - 0usize];
-    ["Offset of field: VmafPictureConfiguration::pic_cnt"]
-        [::std::mem::offset_of!(VmafPictureConfiguration, pic_cnt) - 16usize];
-};
 unsafe extern "C" {
     #[doc = " Preallocate pictures for use with multi-threaded feature extraction.\n Pictures are allocated once and automatically returned to the pool when\n fully unref'd, avoiding repeated allocation/deallocation overhead.\n\n @param vmaf VMAF context allocated with `vmaf_init()`.\n\n @param cfg  Picture configuration including dimensions and pool size.\n\n\n @return 0 on success, or < 0 (a negative errno code) on error."]
     pub fn vmaf_preallocate_pictures(

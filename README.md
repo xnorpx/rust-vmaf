@@ -43,7 +43,26 @@ All libvmaf calls are unsafe raw FFI calls. Applications will usually want a saf
 
 ## Cross-compilation
 
-Set `VMAF_MESON_CROSS_FILE` to a Meson cross-file path when the target cannot be inferred from the active compiler environment. Set `MESON` or `NINJA` to override either build-tool executable.
+iOS device/simulator and Android cross files are generated automatically from Cargo's target and the active SDK/NDK. Set `IPHONEOS_DEPLOYMENT_TARGET` to override the default iOS 12.0 deployment target. For Android, set `ANDROID_NDK_HOME` and optionally `ANDROID_PLATFORM` (default API 21), or build through `cargo-ndk`.
+
+Set `VMAF_MESON_CROSS_FILE` to override the generated file for a custom toolchain. Set `MESON` or `NINJA` to override either build-tool executable.
+
+CI compiles and links these mobile targets:
+
+- `aarch64-apple-ios`
+- `aarch64-apple-ios-sim`
+- `x86_64-apple-ios`
+- `aarch64-linux-android` (`arm64-v8a`)
+- `armv7-linux-androideabi` (`armeabi-v7a`)
+- `x86_64-linux-android`
+- `i686-linux-android` (`x86`)
+
+For Android final binaries, `c++_shared` must be packaged with the application. With `cargo-ndk` and NDK r29, use:
+
+```bash
+cargo ndk --platform 24 --target arm64-v8a \
+	--link-builtins --link-libcxx-shared build
+```
 
 ## Vendored Version
 

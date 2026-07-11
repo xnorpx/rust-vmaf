@@ -111,6 +111,109 @@ jobs:
       - name: Build and test
         run: cargo test --target x86_64-pc-windows-gnu --verbose
 
+  build-ios:
+    name: iOS compile and link
+    runs-on: macos-latest
+    env:
+      IPHONEOS_DEPLOYMENT_TARGET: '12.0'
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Install native dependencies
+        run: |
+          python -m pip install meson ninja
+          brew install nasm
+
+      - name: Install Rust targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: >-
+            aarch64-apple-ios,
+            aarch64-apple-ios-sim,
+            x86_64-apple-ios
+
+      - name: Link iPhone ARM64 tests
+        run: cargo test --lib --target aarch64-apple-ios --no-run --verbose
+
+      - name: Link iPhone simulator ARM64 tests
+        run: cargo test --lib --target aarch64-apple-ios-sim --no-run --verbose
+
+      - name: Link iPhone simulator x86_64 tests
+        run: cargo test --lib --target x86_64-apple-ios --no-run --verbose
+
+  build-android:
+    name: Android compile and link
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Install native dependencies
+        run: |
+          python -m pip install meson ninja
+          sudo apt-get update
+          sudo apt-get install -y nasm xxd
+
+      - name: Install Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r29
+          add-to-path: false
+
+      - name: Install Rust targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: >-
+            aarch64-linux-android,
+            armv7-linux-androideabi,
+            x86_64-linux-android,
+            i686-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --version 4.1.2 --locked
+
+      - name: Link Android ARM64 tests
+        run: >-
+          cargo ndk --platform 24 --target arm64-v8a
+          --link-builtins --link-libcxx-shared
+          test --lib --no-run --verbose
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+
+      - name: Link Android ARMv7 tests
+        run: >-
+          cargo ndk --platform 24 --target armeabi-v7a
+          --link-builtins --link-libcxx-shared
+          test --lib --no-run --verbose
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+
+      - name: Link Android x86_64 tests
+        run: >-
+          cargo ndk --platform 24 --target x86_64
+          --link-builtins --link-libcxx-shared
+          test --lib --no-run --verbose
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+
+      - name: Link Android x86 tests
+        run: >-
+          cargo ndk --platform 24 --target x86
+          --link-builtins --link-libcxx-shared
+          test --lib --no-run --verbose
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+
   lint:
     name: Lint and package
     runs-on: ubuntu-latest

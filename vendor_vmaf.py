@@ -113,6 +113,7 @@ def generate_bindings(vmaf_dir, output_dir):
                 "Vmaf.*",
                 "--allowlist-var",
                 "VMAF_.*",
+                "--no-layout-tests",
                 "--raw-line",
                 "#![allow(rustdoc::broken_intra_doc_links)]",
                 "--raw-line",
