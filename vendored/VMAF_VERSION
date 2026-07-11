@@ -1,0 +1,11 @@
+# VMAF Vendor Information
+#
+# This file tracks the exact version of the vendored VMAF source.
+
+source: https://github.com/Netflix/vmaf
+commit: ec3b1161a5fbdffb59795937f9208cb5fdbd3c3c
+date: 2026-07-09
+branch: master
+
+# To update, run:
+# python vendor_vmaf.py

@@ -1,0 +1,8 @@
+This crate (rust-vmaf) provides Rust FFI bindings to Netflix VMAF.
+
+Upstream source:
+  - Source: https://github.com/Netflix/vmaf
+  - Website: https://github.com/Netflix/vmaf
+
+The upstream VMAF source is licensed under the BSD-2-Clause-Patent license.
+The vendored upstream code retains its original copyright and license notices.

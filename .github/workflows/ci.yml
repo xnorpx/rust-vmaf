@@ -1,0 +1,157 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 0 * * 0'
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-unix:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64 (stable)
+            os: ubuntu-latest
+            rust: stable
+            cargo_args: ''
+          - name: Linux x86_64 (beta)
+            os: ubuntu-latest
+            rust: beta
+            cargo_args: ''
+          - name: Linux x86_64 (nightly)
+            os: ubuntu-latest
+            rust: nightly
+            cargo_args: ''
+          - name: Linux x86_64 (all features)
+            os: ubuntu-latest
+            rust: stable
+            cargo_args: '--all-features'
+          - name: Linux x86_64 (no default features)
+            os: ubuntu-latest
+            rust: stable
+            cargo_args: '--no-default-features'
+          - name: Linux ARM64
+            os: ubuntu-24.04-arm
+            rust: stable
+            cargo_args: ''
+          - name: macOS native
+            os: macos-latest
+            rust: stable
+            cargo_args: ''
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Install Meson and Ninja
+        run: python -m pip install meson ninja
+
+      - name: Install native dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm xxd
+
+      - name: Install native dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install nasm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Build and test
+        run: cargo test --verbose ${{ matrix.cargo_args }}
+
+  build-windows:
+    name: Windows x86_64 (GNU)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: x86_64-pc-windows-gnu
+
+      - name: Install MSYS2 dependencies
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          path-type: inherit
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-meson
+            mingw-w64-x86_64-nasm
+            mingw-w64-x86_64-ninja
+            vim
+
+      - name: Build and test
+        run: cargo test --target x86_64-pc-windows-gnu --verbose
+
+  lint:
+    name: Lint and package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Install native dependencies
+        run: |
+          python -m pip install meson ninja
+          sudo apt-get update
+          sudo apt-get install -y nasm xxd
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Verify package
+        run: cargo package
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build docs
+        run: cargo doc --all-features --no-deps
+        env:
+          DOCS_RS: '1'
+          RUSTDOCFLAGS: -D warnings

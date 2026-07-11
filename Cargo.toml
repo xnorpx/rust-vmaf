@@ -1,0 +1,40 @@
+[package]
+name = "vmaf-head-sys"
+version = "0.1.0"
+edition = "2021"
+authors = ["Marcus Asteborg <xnorpx@outlook.com>"]
+license = "MIT OR Apache-2.0"
+description = "FFI bindings to Netflix VMAF (vendored)"
+repository = "https://github.com/xnorpx/rust-vmaf"
+documentation = "https://docs.rs/vmaf-head-sys"
+keywords = ["vmaf", "video", "quality", "ffi", "bindings"]
+categories = ["external-ffi-bindings", "multimedia::video"]
+links = "vmaf"
+build = "build.rs"
+exclude = [
+    "*.py",
+    "__pycache__/",
+    ".github/",
+    "vendored/vmaf/.git*",
+    "vendored/vmaf/python/",
+    "vendored/vmaf/resource/",
+    "vendored/vmaf/unittest/",
+    "vendored/vmaf/workspace/",
+    "vendored/vmaf/matlab/",
+]
+
+[dependencies]
+
+[build-dependencies]
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+
+[features]
+default = ["built-in-models", "asm"]
+built-in-models = []
+asm = []
+float = []
+
+[package.metadata.docs.rs]
+all-features = true

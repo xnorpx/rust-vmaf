@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read crate version
+        id: crate
+        shell: bash
+        run: |
+          version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          test "v$version" = "$GITHUB_REF_NAME"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: vmaf-head-sys v${{ steps.crate.outputs.version }}
+          body: |
+            Rust FFI bindings to Netflix VMAF with vendored source.
+
+            ```toml
+            [dependencies]
+            vmaf-head-sys = "${{ steps.crate.outputs.version }}"
+            ```
+          draft: false
+          prerelease: ${{ contains(steps.crate.outputs.version, '-') }}
