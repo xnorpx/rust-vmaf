@@ -25,6 +25,10 @@
 #include "integer_adm.h"
 #include "log.h"
 
+#ifdef _MSC_VER
+#include "compat/msvc/builtins.h"
+#endif
+
 #if ARCH_X86
 #include "x86/adm_avx2.h"
 #if HAVE_AVX512

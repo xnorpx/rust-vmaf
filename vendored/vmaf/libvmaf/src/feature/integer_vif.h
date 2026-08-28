@@ -129,16 +129,7 @@ VifResiduals vif_compute_line_residuals(VifPublicState *s, unsigned from,
 
 
 #ifdef _MSC_VER
-#include <intrin.h>
-
-static inline int __builtin_clz(unsigned x) {
-    return (int)__lzcnt(x);
-}
-
-static inline int __builtin_clzll(unsigned long long x) {
-    return (int)__lzcnt64(x);
-}
-
+#include "compat/msvc/builtins.h"
 #endif
 
 static inline int32_t log2_32(const uint16_t *log2_table, uint32_t temp)

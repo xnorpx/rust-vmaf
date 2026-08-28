@@ -550,7 +550,7 @@ libvmaf_feature_static_lib = static_library(
     include_directories : [libvmaf_include, vmaf_include, cuda_dir],
     dependencies: [
         stdatomic_dependency,
-        windows_compat_dependency,
+        msvc_compat_dependency,
         cuda_dependency,
     ],
     objects: common_cuda_objects
@@ -611,7 +611,7 @@ libvmaf = library(
       thread_lib,
       math_lib,
       stdatomic_dependency,
-      windows_compat_dependency,
+    msvc_compat_dependency,
       cuda_dependency,
     ],
     objects : [

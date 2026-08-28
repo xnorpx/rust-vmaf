@@ -5,7 +5,7 @@
 #include <io.h>
 #include <sys/types.h>
 
-typedef _mode_t mode_t;
+typedef int mode_t;
 
 #define fileno _fileno
 #define isatty _isatty
