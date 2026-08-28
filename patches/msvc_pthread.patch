@@ -324,6 +324,28 @@ index 02371fb571dbcd6ad00ef03269e5eb93752e15ca..d2bb3de04f1c67f0bbdb8b3f6eaceb5d
  /*
   * Recursively `mkdir(path, mode)`
   */
+diff --git a/libvmaf/src/libvmaf.c b/libvmaf/src/libvmaf.c
+index f914ddaa27a314e2e0d3e397968e8520263d40db..b365943a5f10e36e0f4a31b1c831bf8fe91c56cd 100644
+--- a/libvmaf/src/libvmaf.c
++++ b/libvmaf/src/libvmaf.c
+@@ -1093,7 +1093,8 @@ int vmaf_score_pooled_model_collection(VmafContext *vmaf,
+     const char *suffix_stddev = "_stddev";
+     const size_t name_sz =
+         strlen(model_collection->name) + strlen(suffix_lo) + 1;
+-    char name[name_sz];
++    char *name = malloc(name_sz);
++    if (!name) return -ENOMEM;
+     memset(name, 0, name_sz);
+ 
+     snprintf(name, name_sz, "%s%s", model_collection->name, suffix_bagging);
+@@ -1116,6 +1117,7 @@ int vmaf_score_pooled_model_collection(VmafContext *vmaf,
+                                      &score->bootstrap.ci.p95.hi,
+                                      index_low, index_high);
+ 
++    free(name);
+     return err;
+ }
+ 
 diff --git a/libvmaf/src/meson.build b/libvmaf/src/meson.build
 index 673e3608944da0e9e95ffc7b0c6c708076ab1712..144d65917c3cd22b222dbffc36a782cac7f937f1 100644
 --- a/libvmaf/src/meson.build
@@ -349,3 +371,118 @@ index 673e3608944da0e9e95ffc7b0c6c708076ab1712..144d65917c3cd22b222dbffc36a782ca
        cuda_dependency,
      ],
      objects : [
+diff --git a/libvmaf/src/predict.c b/libvmaf/src/predict.c
+index 93f163fb41fa04cea4e5adcde5de5a3fbd84b30b..809867e69034174e167e17b1ab819c7e306a6647 100644
+--- a/libvmaf/src/predict.c
++++ b/libvmaf/src/predict.c
+@@ -444,7 +444,9 @@ static int vmaf_bootstrap_predict_score_at_index(
+                                         VmafModelCollectionScore *score)
+ {
+     int err = 0;
+-    double scores[model_collection->cnt];
++    double *scores = malloc(sizeof(*scores) * model_collection->cnt);
++    char *name = NULL;
++    if (!scores) return -ENOMEM;
+ 
+     for (unsigned i = 0; i < model_collection->cnt; i++) {
+         // mean, stddev, etc. are calculated on untransformed/unclipped scores
+@@ -456,7 +458,7 @@ static int vmaf_bootstrap_predict_score_at_index(
+                                           feature_collector, index,
+                                           &scores[i], false,
+                                           false, flags);
+-        if (err) return err;
++                        if (err) goto cleanup;
+ 
+         // do not override the model's transform/clip behavior
+         // write the scores to the feature collector
+@@ -464,7 +466,7 @@ static int vmaf_bootstrap_predict_score_at_index(
+         err = vmaf_predict_score_at_index(model_collection->model[i],
+                                           feature_collector, index,
+                                           &score, true, false, 0);
+-        if (err) return err;
++                        if (err) goto cleanup;
+     }
+ 
+     score->type = VMAF_MODEL_COLLECTION_SCORE_BOOTSTRAP;
+@@ -510,7 +512,11 @@ static int vmaf_bootstrap_predict_score_at_index(
+     const char *suffix_stddev = "_stddev";
+     const size_t name_sz =
+         strlen(model_collection->name) + strlen(suffix_lo) + 1;
+-    char name[name_sz];
++    name = malloc(name_sz);
++    if (!name) {
++        err = -ENOMEM;
++        goto cleanup;
++    }
+     memset(name, 0, name_sz);
+ 
+     snprintf(name, name_sz, "%s%s", model_collection->name, suffix_bagging);
+@@ -529,6 +535,10 @@ static int vmaf_bootstrap_predict_score_at_index(
+     err |= vmaf_feature_collector_append(feature_collector, name,
+                                          score->bootstrap.ci.p95.hi,
+                                          index);
++
++cleanup:
++    free(name);
++    free(scores);
+     return err;
+ }
+ 
+diff --git a/libvmaf/src/read_json_model.c b/libvmaf/src/read_json_model.c
+index cea8438eb36a7ff84a76b332b78532ec55ff430f..1c2986b75783ee62cfced53f91b136169511264f 100644
+--- a/libvmaf/src/read_json_model.c
++++ b/libvmaf/src/read_json_model.c
+@@ -501,30 +501,32 @@ static int model_collection_parse(json_stream *s, VmafModel **model,
+     if (!c.name) return -ENOMEM;
+ 
+     const size_t cfg_name_sz = strlen(name) + 5 + 1;
+-    char cfg_name[cfg_name_sz];
++    char *cfg_name = malloc(cfg_name_sz);
++    if (!cfg_name) {
++        free((char*)name);
++        return -ENOMEM;
++    }
+ 
+-    const size_t generated_key_sz = 4 + 1;
+-    char generated_key[generated_key_sz];
++    char generated_key[5];
+ 
+     unsigned i = 0;
+     while (json_peek(s) != JSON_OBJECT_END && !json_get_error(s)) {
+-        if (json_next(s) != JSON_STRING)
+-            return -EINVAL;
++        if (json_next(s) != JSON_STRING) goto cleanup;
+ 
+         const char *key = json_get_string(s, NULL);
+-        snprintf(generated_key, generated_key_sz, "%d", i);
++        snprintf(generated_key, sizeof(generated_key), "%d", i);
+ 
+         if (!strcmp(key, generated_key)) {
+             VmafModel *m;
+             err = vmaf_read_json_model(&m, &c, s);
+-            if (err) return err;
++            if (err) goto cleanup;
+ 
+             if (i == 0) {
+                 *model = m;
+                 c.name = cfg_name;
+             } else {
+                 err = vmaf_model_collection_append(model_collection, m);
+-                if (err) return err;
++                if (err) goto cleanup;
+             }
+ 
+             sprintf((char*)c.name, "%s_%04d", name, ++i);
+@@ -534,8 +536,11 @@ static int model_collection_parse(json_stream *s, VmafModel **model,
+         json_skip(s);
+     }
+ 
++    if (!(*model_collection)) err = -EINVAL;
++
++cleanup:
++    free(cfg_name);
+     free((char*)name);
+-    if (!(*model_collection)) return -EINVAL;
+     return err;
+ }
+ 
