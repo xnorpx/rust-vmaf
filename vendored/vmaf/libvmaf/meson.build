@@ -29,13 +29,18 @@ elif host_machine.system() == 'darwin'
 endif
 
 # Header checks
+windows_compat_dependency = []
+if host_machine.system() == 'windows'
+    windows_compat_dependency = declare_dependency(
+        include_directories : include_directories('src/compat/msvc'),
+    )
+endif
+
 stdatomic_dependency = []
 if not cc.check_header('stdatomic.h')
     if cc.get_id() == 'msvc'
         # we have a custom replacement for MSVC
-        stdatomic_dependency = declare_dependency(
-            include_directories : include_directories('src/compat/msvc'),
-        )
+        stdatomic_dependency = windows_compat_dependency
     elif cc.compiles('''int main() { int v = 0; return __atomic_fetch_add(&v, 1, __ATOMIC_SEQ_CST); }''',
                      name : 'GCC-style atomics', args : test_args)
         stdatomic_dependency = declare_dependency(

@@ -1,4 +1,0 @@
-#ifndef VMAF_MSVC_ATTRIBUTES_H
-#define VMAF_MSVC_ATTRIBUTES_H
-
-#endif

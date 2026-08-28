@@ -21,7 +21,6 @@ Building requires:
 - A C and C++ compiler
 - `xxd` when `built-in-models` is enabled
 - NASM on x86 and x86_64 platforms except MSVC
-- Clang-cl on MSVC targets
 
 CUDA is intentionally disabled. This crate binds the portable CPU API and does not expose `libvmaf_cuda.h`.
 
@@ -33,7 +32,7 @@ CUDA is intentionally disabled. This crate binds the portable CPU API and does n
 
 On x86 and x86_64, NASM support and AVX2 kernels are always built, including with `--no-default-features`. VMAF still uses CPUID runtime dispatch, so AVX2 instructions execute only when both the CPU and operating system support them. This avoids illegal-instruction crashes on older x86 systems.
 
-MSVC-target builds compile libvmaf with clang-cl and use Windows-native threading compatibility plus scalar C kernels. Windows GNU builds retain the assembly and AVX2 kernels. Set `CLANG_CL` to override the clang-cl executable.
+MSVC builds use a private Windows-native pthread translation layer and scalar C kernels. Windows GNU builds retain the assembly and AVX2 kernels.
 
 ## Usage
 
@@ -60,7 +59,7 @@ CI compiles and links these mobile targets:
 - `x86_64-linux-android`
 - `i686-linux-android` (`x86`)
 
-CI also builds and runs the test suite for both `x86_64-pc-windows-gnu` and `x86_64-pc-windows-msvc`; the latter compiles libvmaf with clang-cl.
+CI also builds and runs the test suite for both `x86_64-pc-windows-gnu` and `x86_64-pc-windows-msvc`.
 
 For Android final binaries, `c++_shared` must be packaged with the application. With `cargo-ndk` and NDK r29, use:
 
@@ -76,6 +75,8 @@ The vendored VMAF source is tracked in `vendored/VMAF_VERSION`. Run the update s
 ```bash
 python vendor_vmaf.py
 ```
+
+The update script applies the ordered patches under `patches/` after copying upstream VMAF. Patch failures stop the update so upstream changes cannot silently drop local platform fixes.
 
 Regenerate bindings without downloading VMAF:
 

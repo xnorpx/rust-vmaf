@@ -112,7 +112,7 @@ jobs:
         run: cargo test --target x86_64-pc-windows-gnu --verbose
 
   build-windows-msvc:
-    name: Windows x86_64 (MSVC target, clang-cl)
+    name: Windows x86_64 (MSVC)
     runs-on: windows-latest
 
     steps:

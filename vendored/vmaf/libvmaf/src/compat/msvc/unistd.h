@@ -5,6 +5,8 @@
 #include <io.h>
 #include <sys/types.h>
 
+typedef _mode_t mode_t;
+
 #define fileno _fileno
 #define isatty _isatty
 #define mkdir _mkdir

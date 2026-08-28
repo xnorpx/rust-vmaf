@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Vendor VMAF HEAD and generate Rust bindings for its public C API."""
+"""Vendor VMAF HEAD, apply local patches, and generate Rust bindings."""
 
 import argparse
 import json
@@ -58,6 +58,23 @@ def copy_source(source_dir, target_dir):
     for directory in ("libvmaf", "model"):
         shutil.copytree(source_dir / directory, target_dir / directory)
     shutil.copy2(source_dir / "LICENSE", target_dir / "LICENSE")
+
+
+def apply_patches(project_dir, vmaf_dir, patches_dir):
+    patch_root = vmaf_dir.relative_to(project_dir)
+    for patch in sorted(patches_dir.glob("*.patch")):
+        print(f"Applying vendor patch: {patch.name}")
+        run_command(
+            [
+                "git",
+                "apply",
+                "--verbose",
+                "--whitespace=error-all",
+                f"--directory={patch_root}",
+                str(patch.resolve()),
+            ],
+            cwd=project_dir,
+        )
 
 
 def write_version_file(vendored_dir, commit_info):
@@ -171,12 +188,13 @@ def main():
 
     print(f"Vendoring VMAF {commit_info['sha'][:12]}: {commit_info['message']}")
     copy_source(source_dir, vmaf_dir)
+    apply_patches(project_dir, vmaf_dir, project_dir / "patches")
     write_version_file(vendored_dir, commit_info)
     generate_bindings(vmaf_dir, project_dir / "src")
     if temporary_clone:
         temporary_clone.cleanup()
 
-    print("Updated vendored/VMAF_VERSION, vendored/vmaf, and src/bindings.rs")
+    print("Updated patched VMAF source, vendored/VMAF_VERSION, and src/bindings.rs")
 
 
 if __name__ == "__main__":
