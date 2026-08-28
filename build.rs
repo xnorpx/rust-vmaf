@@ -90,7 +90,8 @@ fn build_vmaf() -> Result<(), Box<dyn std::error::Error>> {
         require_nasm()?;
     }
 
-    let asm_enabled = is_x86 || env::var_os("CARGO_FEATURE_ASM").is_some();
+    let asm_enabled =
+        is_x86 || (target_arch == "aarch64" && env::var_os("CARGO_FEATURE_ASM").is_some());
     let avx512_enabled = asm_enabled && is_x86;
     remove_dir_if_exists(&build_dir)?;
     remove_dir_if_exists(&install_dir)?;
@@ -435,10 +436,15 @@ fn android_api_level() -> String {
         "CARGO_NDK_PLATFORM",
     ]
     .iter()
-    .find_map(|name| env::var(name).ok())
-    .map(|value| value.trim_start_matches("android-").to_string())
-    .filter(|value| !value.is_empty() && value.chars().all(|c| c.is_ascii_digit()))
+    .filter_map(|name| env::var(name).ok())
+    .find_map(|value| parse_android_api_level(&value))
     .unwrap_or_else(|| "21".into())
+}
+
+fn parse_android_api_level(value: &str) -> Option<String> {
+    let value = value.trim_start_matches("android-");
+    (!value.is_empty() && value.chars().all(|character| character.is_ascii_digit()))
+        .then(|| value.to_string())
 }
 
 fn command_stdout(program: &str, args: &[&str]) -> Result<String, Box<dyn std::error::Error>> {
@@ -602,5 +608,13 @@ mod tests {
         );
         assert_eq!(parse_nasm_version(b"NASM version 2.13.02"), Some((2, 13)));
         assert_eq!(parse_nasm_version(b"not a version"), None);
+    }
+
+    #[test]
+    fn android_api_parser_rejects_cargo_ndk_abi_names() {
+        assert_eq!(parse_android_api_level("android-24"), Some("24".into()));
+        assert_eq!(parse_android_api_level("24"), Some("24".into()));
+        assert_eq!(parse_android_api_level("armeabi-v7a"), None);
+        assert_eq!(parse_android_api_level(""), None);
     }
 }

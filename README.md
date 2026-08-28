@@ -34,6 +34,8 @@ On x86 and x86_64, NASM support and AVX2/AVX-512 kernels are always built, inclu
 
 MSVC builds use a private Windows-native pthread translation layer. The optimized x86 sources use the same runtime dispatch as Windows GNU builds.
 
+AArch64 builds use VMAF's NEON kernels when the `asm` feature is enabled. ARMv7 feature kernels remain scalar.
+
 ### CPU tuning
 
 The native library is compiled with Meson's release optimization level. Rust target settings are also propagated to the C and C++ compilers:
