@@ -15,8 +15,9 @@ This repository publishes `vmaf-head-sys`, raw Rust FFI bindings to a statically
 ## Native Build Invariants
 
 - `build.rs` owns Meson configuration, static linking, platform runtime libraries, and generated iOS/Android cross files.
-- Meson and Ninja are required for native builds. `xxd` is required for built-in models.
-- x86 and x86_64 builds compile NASM and AVX2 paths, including with `--no-default-features`; runtime CPUID dispatch must remain enabled. MSVC builds are the exception and use scalar kernels.
+- Meson and Ninja are required for native builds. `xxd` is required for built-in models. NASM 2.14 or later is required on x86 targets so AVX-512 support cannot silently degrade.
+- x86 and x86_64 builds compile NASM and AVX2/AVX-512 paths, including with `--no-default-features` and MSVC; runtime CPUID and operating-system dispatch checks must remain enabled.
+- `build.rs` propagates Rust native CPU and explicit x86 target-feature settings to the C/C++ compiler. Host-native flags must never be applied while cross-compiling.
 - MSVC builds use private pthread and POSIX translation headers added by the vendor patch under `vendored/vmaf/libvmaf/src/compat/msvc`.
 - AArch64 builds use VMAF's NEON paths when the `asm` feature is enabled.
 - Preserve compile-and-link support for every target in `.github/workflows/ci.yml`, including iOS device/simulators and all four Android ABIs.

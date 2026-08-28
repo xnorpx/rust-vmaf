@@ -18,12 +18,23 @@ fn main() {
 }
 
 fn build_vmaf() -> Result<(), Box<dyn std::error::Error>> {
+    let host = env::var("HOST")?;
     let target = env::var("TARGET")?;
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+    let target_features = env::var("CARGO_CFG_TARGET_FEATURE").unwrap_or_default();
     let target_os = env::var("CARGO_CFG_TARGET_OS")?;
     let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
     let is_x86 = matches!(target_arch.as_str(), "x86" | "x86_64");
     let is_msvc = target_os == "windows" && target_env == "msvc";
+    let host_build = host == target;
+    let encoded_rustflags = env::var("CARGO_ENCODED_RUSTFLAGS").unwrap_or_default();
+    let native_requested = target_cpu_from_rustflags(&encoded_rustflags) == Some("native");
+    let native_tuning = native_requested && host_build;
+    let compiler_tuning_args = if host_build {
+        compiler_tuning_args(&target_arch, is_msvc, native_tuning, &target_features)
+    } else {
+        Vec::new()
+    };
     if env::var_os("DOCS_RS").is_some() || target_arch.starts_with("wasm") {
         return Ok(());
     }
@@ -47,6 +58,8 @@ fn build_vmaf() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-env-changed=MESON");
     println!("cargo:rerun-if-env-changed=NINJA");
+    println!("cargo:rerun-if-env-changed=CARGO_ENCODED_RUSTFLAGS");
+    println!("cargo:rerun-if-env-changed=CARGO_CFG_TARGET_FEATURE");
     println!("cargo:rerun-if-env-changed=VMAF_MESON_CROSS_FILE");
     println!("cargo:rerun-if-env-changed=IPHONEOS_DEPLOYMENT_TARGET");
     println!("cargo:rerun-if-env-changed=ANDROID_NDK_HOME");
@@ -55,18 +68,32 @@ fn build_vmaf() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-env-changed=NDK_HOME");
     println!("cargo:rerun-if-env-changed=ANDROID_PLATFORM");
     println!("cargo:rerun-if-env-changed=CARGO_NDK_PLATFORM");
+    println!("cargo:rerun-if-env-changed=CARGO_NDK_ANDROID_PLATFORM");
     println!("cargo:rerun-if-env-changed=CARGO_NDK_SYSROOT_PATH");
     println!("cargo:rerun-if-env-changed=CARGO_NDK_SYSROOT_LIBS_PATH");
+    if native_requested && !native_tuning {
+        println!(
+            "cargo:warning=Ignoring -C target-cpu=native for cross-compiled libvmaf target {target}"
+        );
+    } else if !compiler_tuning_args.is_empty() {
+        println!(
+            "cargo:warning=Applying Rust target tuning to libvmaf C/C++: {}",
+            compiler_tuning_args.join(" ")
+        );
+    }
 
     let meson = env::var_os("MESON").unwrap_or_else(|| "meson".into());
     let ninja = env::var_os("NINJA").unwrap_or_else(|| "ninja".into());
     require_build_tool(&meson, "Meson", "MESON")?;
     require_build_tool(&ninja, "Ninja", "NINJA")?;
-    if is_x86 && !is_msvc {
+    if is_x86 {
         require_nasm()?;
     }
 
-    let asm_enabled = !is_msvc && (is_x86 || env::var_os("CARGO_FEATURE_ASM").is_some());
+    let asm_enabled = is_x86 || env::var_os("CARGO_FEATURE_ASM").is_some();
+    let avx512_enabled = asm_enabled && is_x86;
+    remove_dir_if_exists(&build_dir)?;
+    remove_dir_if_exists(&install_dir)?;
 
     let mut setup = Command::new(&meson);
     setup
@@ -77,6 +104,7 @@ fn build_vmaf() -> Result<(), Box<dyn std::error::Error>> {
         .arg("--libdir=lib")
         .arg("--default-library=static")
         .arg("--buildtype=release")
+        .arg("-Db_ndebug=if-release")
         .arg("-Denable_tests=false")
         .arg("-Denable_docs=false")
         .arg("-Denable_tools=false")
@@ -84,16 +112,21 @@ fn build_vmaf() -> Result<(), Box<dyn std::error::Error>> {
         .arg("-Denable_nvtx=false")
         .arg(feature_option("built-in-models", "built_in_models"))
         .arg(format!("-Denable_asm={asm_enabled}"))
+        .arg(format!("-Denable_avx512={avx512_enabled}"))
         .arg(feature_option("float", "enable_float"));
 
-    if is_msvc {
-        setup
-            .arg("--native-file")
-            .arg(generate_msvc_native_file(&out_dir)?);
+    if !compiler_tuning_args.is_empty() {
+        setup.arg("--native-file").arg(generate_native_tuning_file(
+            &out_dir,
+            &compiler_tuning_args,
+        )?);
     }
 
     let cross_file = match env::var_os("VMAF_MESON_CROSS_FILE") {
-        Some(path) => Some(PathBuf::from(path)),
+        Some(path) => {
+            println!("cargo:rerun-if-changed={}", PathBuf::from(&path).display());
+            Some(PathBuf::from(path))
+        }
         None => generate_mobile_cross_file(&target, &target_arch, &target_os, &out_dir)?,
     };
     if let Some(cross_file) = cross_file {
@@ -166,14 +199,110 @@ fn feature_option(feature: &str, option: &str) -> String {
     format!("-D{option}={value}")
 }
 
-fn generate_msvc_native_file(out_dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let contents = format!(
-        "[built-in options]\nc_args = [{}]\n",
-        meson_string("/D_USE_MATH_DEFINES"),
-    );
-    let path = out_dir.join("meson-msvc.ini");
+fn target_cpu_from_rustflags(encoded_rustflags: &str) -> Option<&str> {
+    let arguments = encoded_rustflags.split('\x1f').collect::<Vec<_>>();
+    let mut target_cpu = None;
+    let mut index = 0;
+    while index < arguments.len() {
+        let argument = arguments[index];
+        let codegen_option = if matches!(argument, "-C" | "--codegen") {
+            index += 1;
+            arguments.get(index).copied()
+        } else if let Some(option) = argument.strip_prefix("--codegen=") {
+            Some(option)
+        } else {
+            argument.strip_prefix("-C")
+        };
+        if let Some(value) = codegen_option.and_then(|option| option.strip_prefix("target-cpu=")) {
+            target_cpu = Some(value);
+        }
+        index += 1;
+    }
+    target_cpu
+}
+
+fn compiler_tuning_args(
+    target_arch: &str,
+    is_msvc: bool,
+    native_tuning: bool,
+    target_features: &str,
+) -> Vec<&'static str> {
+    if is_msvc {
+        return msvc_arch_arg(target_features).into_iter().collect();
+    }
+    if native_tuning {
+        return if matches!(target_arch, "aarch64" | "arm") {
+            vec!["-mcpu=native"]
+        } else {
+            vec!["-march=native", "-mtune=native"]
+        };
+    }
+    if !matches!(target_arch, "x86" | "x86_64") {
+        return Vec::new();
+    }
+
+    const X86_FEATURE_FLAGS: &[(&str, &str)] = &[
+        ("avx", "-mavx"),
+        ("avx2", "-mavx2"),
+        ("fma", "-mfma"),
+        ("avx512f", "-mavx512f"),
+        ("avx512bw", "-mavx512bw"),
+        ("avx512cd", "-mavx512cd"),
+        ("avx512dq", "-mavx512dq"),
+        ("avx512vl", "-mavx512vl"),
+    ];
+    let features = target_features.split(',').collect::<Vec<_>>();
+    X86_FEATURE_FLAGS
+        .iter()
+        .filter_map(|(feature, flag)| features.contains(feature).then_some(*flag))
+        .collect()
+}
+
+fn msvc_arch_arg(target_features: &str) -> Option<&'static str> {
+    let features = target_features.split(',').collect::<Vec<_>>();
+    const REQUIRED_AVX512_FEATURES: &[&str] = &[
+        "avx2", "avx512f", "avx512bw", "avx512cd", "avx512dq", "avx512vl", "bmi1", "bmi2", "fma",
+    ];
+    const REQUIRED_AVX2_FEATURES: &[&str] = &["avx2", "bmi1", "bmi2", "fma"];
+    if REQUIRED_AVX512_FEATURES
+        .iter()
+        .all(|feature| features.contains(feature))
+    {
+        Some("/arch:AVX512")
+    } else if REQUIRED_AVX2_FEATURES
+        .iter()
+        .all(|feature| features.contains(feature))
+    {
+        Some("/arch:AVX2")
+    } else if features.contains(&"avx") {
+        Some("/arch:AVX")
+    } else {
+        None
+    }
+}
+
+fn generate_native_tuning_file(
+    out_dir: &Path,
+    compiler_args: &[&str],
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let arguments = compiler_args
+        .iter()
+        .map(|argument| meson_string(argument))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let contents =
+        format!("[built-in options]\nc_args = [{arguments}]\ncpp_args = [{arguments}]\n");
+    let path = out_dir.join("meson-native-tuning.ini");
     fs::write(&path, contents)?;
     Ok(path)
+}
+
+fn remove_dir_if_exists(path: &Path) -> Result<(), std::io::Error> {
+    match fs::remove_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
 }
 
 fn generate_mobile_cross_file(
@@ -300,12 +429,16 @@ fn android_sysroot() -> Result<PathBuf, Box<dyn std::error::Error>> {
 }
 
 fn android_api_level() -> String {
-    ["ANDROID_PLATFORM", "CARGO_NDK_PLATFORM"]
-        .iter()
-        .find_map(|name| env::var(name).ok())
-        .map(|value| value.trim_start_matches("android-").to_string())
-        .filter(|value| !value.is_empty() && value.chars().all(|c| c.is_ascii_digit()))
-        .unwrap_or_else(|| "21".into())
+    [
+        "CARGO_NDK_ANDROID_PLATFORM",
+        "ANDROID_PLATFORM",
+        "CARGO_NDK_PLATFORM",
+    ]
+    .iter()
+    .find_map(|name| env::var(name).ok())
+    .map(|value| value.trim_start_matches("android-").to_string())
+    .filter(|value| !value.is_empty() && value.chars().all(|c| c.is_ascii_digit()))
+    .unwrap_or_else(|| "21".into())
 }
 
 fn command_stdout(program: &str, args: &[&str]) -> Result<String, Box<dyn std::error::Error>> {
@@ -363,7 +496,18 @@ fn require_build_tool(
 
 fn require_nasm() -> Result<(), Box<dyn std::error::Error>> {
     match Command::new("nasm").arg("-v").output() {
-        Ok(output) if output.status.success() => Ok(()),
+        Ok(output) if output.status.success() => {
+            let version = parse_nasm_version(&output.stdout)
+                .ok_or("Could not parse the installed NASM version")?;
+            if version < (2, 14) {
+                return Err(format!(
+                    "NASM 2.14 or later is required for AVX-512 builds; found {}.{}",
+                    version.0, version.1
+                )
+                .into());
+            }
+            Ok(())
+        }
         Ok(output) => Err(format!(
             "NASM failed its version check with status {}. A working NASM installation is required for x86 and x86_64 builds.",
             output.status
@@ -377,5 +521,86 @@ fn require_nasm() -> Result<(), Box<dyn std::error::Error>> {
             "Failed to run NASM: {error}. Install NASM and ensure `nasm` is on PATH."
         )
         .into()),
+    }
+}
+
+fn parse_nasm_version(output: &[u8]) -> Option<(u32, u32)> {
+    String::from_utf8_lossy(output)
+        .split_whitespace()
+        .find_map(|token| {
+            let mut components = token.split('.');
+            let major = components.next()?.parse().ok()?;
+            let minor = components.next()?.parse().ok()?;
+            Some((major, minor))
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn target_cpu_parser_accepts_cargo_flag_forms_and_last_value_wins() {
+        assert_eq!(
+            target_cpu_from_rustflags("-C\x1ftarget-cpu=native"),
+            Some("native")
+        );
+        assert_eq!(
+            target_cpu_from_rustflags("-Ctarget-cpu=x86-64-v3"),
+            Some("x86-64-v3")
+        );
+        assert_eq!(
+            target_cpu_from_rustflags("--codegen=target-cpu=native"),
+            Some("native")
+        );
+        assert_eq!(
+            target_cpu_from_rustflags("-Ctarget-cpu=native\x1f-C\x1ftarget-cpu=x86-64-v2"),
+            Some("x86-64-v2")
+        );
+    }
+
+    #[test]
+    fn native_tuning_uses_architecture_appropriate_compiler_flags() {
+        assert_eq!(
+            compiler_tuning_args("x86_64", false, true, "avx2,fma"),
+            ["-march=native", "-mtune=native"]
+        );
+        assert_eq!(
+            compiler_tuning_args("aarch64", false, true, "neon"),
+            ["-mcpu=native"]
+        );
+    }
+
+    #[test]
+    fn explicit_x86_features_are_forwarded_to_gnu_style_compilers() {
+        assert_eq!(
+            compiler_tuning_args("x86_64", false, false, "avx,avx2,avx512bw,avx512f,fma,sse2"),
+            ["-mavx", "-mavx2", "-mfma", "-mavx512f", "-mavx512bw"]
+        );
+    }
+
+    #[test]
+    fn msvc_uses_highest_resolved_x86_architecture() {
+        assert_eq!(msvc_arch_arg("avx,avx2,bmi1,bmi2,fma"), Some("/arch:AVX2"));
+        assert_eq!(
+            msvc_arch_arg("avx,avx2,avx512bw,avx512cd,avx512dq,avx512f,avx512vl,bmi1,bmi2,fma"),
+            Some("/arch:AVX512")
+        );
+        assert_eq!(msvc_arch_arg("avx,avx2,fma"), Some("/arch:AVX"));
+        assert_eq!(
+            msvc_arch_arg("avx,avx2,avx512f,bmi1,bmi2,fma"),
+            Some("/arch:AVX2")
+        );
+        assert_eq!(msvc_arch_arg("sse,sse2"), None);
+    }
+
+    #[test]
+    fn nasm_version_parser_reads_release_components() {
+        assert_eq!(
+            parse_nasm_version(b"NASM version 2.16.03 compiled on Jan 1 2026"),
+            Some((2, 16))
+        );
+        assert_eq!(parse_nasm_version(b"NASM version 2.13.02"), Some((2, 13)));
+        assert_eq!(parse_nasm_version(b"not a version"), None);
     }
 }
