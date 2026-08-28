@@ -15,8 +15,8 @@ This repository publishes `vmaf-head-sys`, raw Rust FFI bindings to a statically
 
 - `build.rs` owns Meson configuration, static linking, platform runtime libraries, and generated iOS/Android cross files.
 - Meson and Ninja are required for native builds. `xxd` is required for built-in models.
-- x86 and x86_64 builds compile NASM and AVX2 paths, including with `--no-default-features`; runtime CPUID dispatch must remain enabled. MSVC is the exception because upstream's x86 C uses unsupported vector extensions, so it uses scalar kernels.
-- MSVC builds use the compatibility header under `compat/msvc` for libvmaf's pthread API; keep that shim outside the vendored source tree.
+- x86 and x86_64 builds compile NASM and AVX2 paths, including with `--no-default-features`; runtime CPUID dispatch must remain enabled. MSVC-target builds are the exception and use scalar kernels compiled with clang-cl.
+- MSVC-target builds use the compatibility headers under `compat/msvc` for libvmaf's pthread and POSIX APIs; keep those shims outside the vendored source tree.
 - AArch64 builds use VMAF's NEON paths when the `asm` feature is enabled.
 - Preserve compile-and-link support for every target in `.github/workflows/ci.yml`, including iOS device/simulators and all four Android ABIs.
 - Android uses NDK libc++ (`c++_shared`), not GNU `stdc++`. NDK r29 x86 links require Clang builtins through `cargo-ndk --link-builtins`.

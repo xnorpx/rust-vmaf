@@ -48,6 +48,7 @@ fn build_vmaf() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-env-changed=MESON");
     println!("cargo:rerun-if-env-changed=NINJA");
+    println!("cargo:rerun-if-env-changed=CLANG_CL");
     println!("cargo:rerun-if-env-changed=VMAF_MESON_CROSS_FILE");
     println!("cargo:rerun-if-env-changed=IPHONEOS_DEPLOYMENT_TARGET");
     println!("cargo:rerun-if-env-changed=ANDROID_NDK_HOME");
@@ -63,6 +64,13 @@ fn build_vmaf() -> Result<(), Box<dyn std::error::Error>> {
     let ninja = env::var_os("NINJA").unwrap_or_else(|| "ninja".into());
     require_build_tool(&meson, "Meson", "MESON")?;
     require_build_tool(&ninja, "Ninja", "NINJA")?;
+    let clang_cl = if is_msvc {
+        let executable = env::var_os("CLANG_CL").unwrap_or_else(|| "clang-cl".into());
+        require_build_tool(&executable, "Clang-cl", "CLANG_CL")?;
+        Some(executable)
+    } else {
+        None
+    };
     if is_x86 && !is_msvc {
         require_nasm()?;
     }
@@ -87,10 +95,12 @@ fn build_vmaf() -> Result<(), Box<dyn std::error::Error>> {
         .arg(format!("-Denable_asm={asm_enabled}"))
         .arg(feature_option("float", "enable_float"));
 
-    if is_msvc {
-        setup
-            .arg("--native-file")
-            .arg(generate_msvc_native_file(&manifest_dir, &out_dir)?);
+    if let Some(clang_cl) = clang_cl.as_deref() {
+        setup.arg("--native-file").arg(generate_msvc_native_file(
+            &manifest_dir,
+            &out_dir,
+            clang_cl,
+        )?);
     }
 
     let cross_file = match env::var_os("VMAF_MESON_CROSS_FILE") {
@@ -170,6 +180,7 @@ fn feature_option(feature: &str, option: &str) -> String {
 fn generate_msvc_native_file(
     manifest_dir: &Path,
     out_dir: &Path,
+    compiler: &OsStr,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let include_dir = manifest_dir
         .join("compat/msvc")
@@ -177,7 +188,9 @@ fn generate_msvc_native_file(
         .replace('\\', "/");
     let include_arg = format!("/I{include_dir}");
     let contents = format!(
-        "[built-in options]\nc_args = [{}, {}]\n",
+        "[binaries]\nc = {}\ncpp = {}\n\n[built-in options]\nc_args = [{}, {}]\n",
+        meson_string(&compiler.to_string_lossy()),
+        meson_string(&compiler.to_string_lossy()),
         meson_string("/D_USE_MATH_DEFINES"),
         meson_string(&include_arg),
     );
