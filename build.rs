@@ -21,7 +21,9 @@ fn build_vmaf() -> Result<(), Box<dyn std::error::Error>> {
     let target = env::var("TARGET")?;
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
     let target_os = env::var("CARGO_CFG_TARGET_OS")?;
+    let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
     let is_x86 = matches!(target_arch.as_str(), "x86" | "x86_64");
+    let is_msvc = target_os == "windows" && target_env == "msvc";
     if env::var_os("DOCS_RS").is_some() || target_arch.starts_with("wasm") {
         return Ok(());
     }
@@ -41,6 +43,7 @@ fn build_vmaf() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("cargo:rerun-if-changed=vendored/vmaf");
+    println!("cargo:rerun-if-changed=compat/msvc");
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-env-changed=MESON");
@@ -60,11 +63,11 @@ fn build_vmaf() -> Result<(), Box<dyn std::error::Error>> {
     let ninja = env::var_os("NINJA").unwrap_or_else(|| "ninja".into());
     require_build_tool(&meson, "Meson", "MESON")?;
     require_build_tool(&ninja, "Ninja", "NINJA")?;
-    if is_x86 {
+    if is_x86 && !is_msvc {
         require_nasm()?;
     }
 
-    let asm_enabled = is_x86 || env::var_os("CARGO_FEATURE_ASM").is_some();
+    let asm_enabled = !is_msvc && (is_x86 || env::var_os("CARGO_FEATURE_ASM").is_some());
 
     let mut setup = Command::new(&meson);
     setup
@@ -83,6 +86,12 @@ fn build_vmaf() -> Result<(), Box<dyn std::error::Error>> {
         .arg(feature_option("built-in-models", "built_in_models"))
         .arg(format!("-Denable_asm={asm_enabled}"))
         .arg(feature_option("float", "enable_float"));
+
+    if is_msvc {
+        setup
+            .arg("--native-file")
+            .arg(generate_msvc_native_file(&manifest_dir, &out_dir)?);
+    }
 
     let cross_file = match env::var_os("VMAF_MESON_CROSS_FILE") {
         Some(path) => Some(PathBuf::from(path)),
@@ -121,7 +130,6 @@ fn build_vmaf() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!("cargo:rustc-link-lib=static=vmaf");
 
-    let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
     match (target_os.as_str(), target_env.as_str()) {
         ("macos" | "ios", _) => println!("cargo:rustc-link-lib=c++"),
         ("android", _) => {
@@ -157,6 +165,25 @@ fn feature_option(feature: &str, option: &str) -> String {
         "false"
     };
     format!("-D{option}={value}")
+}
+
+fn generate_msvc_native_file(
+    manifest_dir: &Path,
+    out_dir: &Path,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let include_dir = manifest_dir
+        .join("compat/msvc")
+        .to_string_lossy()
+        .replace('\\', "/");
+    let include_arg = format!("/I{include_dir}");
+    let contents = format!(
+        "[built-in options]\nc_args = [{}, {}]\n",
+        meson_string("/D_USE_MATH_DEFINES"),
+        meson_string(&include_arg),
+    );
+    let path = out_dir.join("meson-msvc.ini");
+    fs::write(&path, contents)?;
+    Ok(path)
 }
 
 fn generate_mobile_cross_file(

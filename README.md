@@ -20,7 +20,7 @@ Building requires:
 - Meson and Ninja
 - A C and C++ compiler
 - `xxd` when `built-in-models` is enabled
-- NASM on x86 and x86_64 platforms
+- NASM on x86 and x86_64 platforms except MSVC
 
 CUDA is intentionally disabled. This crate binds the portable CPU API and does not expose `libvmaf_cuda.h`.
 
@@ -31,6 +31,8 @@ CUDA is intentionally disabled. This crate binds the portable CPU API and does n
 - `float` - compile floating-point feature extractors
 
 On x86 and x86_64, NASM support and AVX2 kernels are always built, including with `--no-default-features`. VMAF still uses CPUID runtime dispatch, so AVX2 instructions execute only when both the CPU and operating system support them. This avoids illegal-instruction crashes on older x86 systems.
+
+MSVC builds use Windows-native threading compatibility and scalar C kernels because upstream's x86 AVX2 C sources rely on GCC and Clang vector extensions. Windows GNU builds retain the assembly and AVX2 kernels.
 
 ## Usage
 
@@ -56,6 +58,8 @@ CI compiles and links these mobile targets:
 - `armv7-linux-androideabi` (`armeabi-v7a`)
 - `x86_64-linux-android`
 - `i686-linux-android` (`x86`)
+
+CI also builds and runs the test suite for both `x86_64-pc-windows-gnu` and `x86_64-pc-windows-msvc`.
 
 For Android final binaries, `c++_shared` must be packaged with the application. With `cargo-ndk` and NDK r29, use:
 
