@@ -458,7 +458,7 @@ static int vmaf_bootstrap_predict_score_at_index(
                                           feature_collector, index,
                                           &scores[i], false,
                                           false, flags);
-                        if (err) goto cleanup;
+        if (err) goto cleanup;
 
         // do not override the model's transform/clip behavior
         // write the scores to the feature collector
@@ -466,7 +466,7 @@ static int vmaf_bootstrap_predict_score_at_index(
         err = vmaf_predict_score_at_index(model_collection->model[i],
                                           feature_collector, index,
                                           &score, true, false, 0);
-                        if (err) goto cleanup;
+        if (err) goto cleanup;
     }
 
     score->type = VMAF_MODEL_COLLECTION_SCORE_BOOTSTRAP;

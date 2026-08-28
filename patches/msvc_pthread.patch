@@ -347,7 +347,7 @@ index f914ddaa27a314e2e0d3e397968e8520263d40db..b365943a5f10e36e0f4a31b1c831bf8f
  }
  
 diff --git a/libvmaf/src/meson.build b/libvmaf/src/meson.build
-index 673e3608944da0e9e95ffc7b0c6c708076ab1712..144d65917c3cd22b222dbffc36a782cac7f937f1 100644
+index 6900c572d9edfa0f17312d1e84046ccc0c83d396..b6827faa7e2895f3acb474eb3e301fa5054aa964 100644
 --- a/libvmaf/src/meson.build
 +++ b/libvmaf/src/meson.build
 @@ -548,7 +548,11 @@ libvmaf_feature_static_lib = static_library(
@@ -363,16 +363,19 @@ index 673e3608944da0e9e95ffc7b0c6c708076ab1712..144d65917c3cd22b222dbffc36a782ca
      objects: common_cuda_objects
  )
  
-@@ -607,6 +611,7 @@ libvmaf = library(
+@@ -607,8 +611,9 @@ libvmaf = library(
        thread_lib,
        math_lib,
        stdatomic_dependency,
 +    msvc_compat_dependency,
        cuda_dependency,
+-	  rev_dep
++    rev_dep,
      ],
      objects : [
+         platform_specific_cpu_objects,
 diff --git a/libvmaf/src/predict.c b/libvmaf/src/predict.c
-index 93f163fb41fa04cea4e5adcde5de5a3fbd84b30b..809867e69034174e167e17b1ab819c7e306a6647 100644
+index 93f163fb41fa04cea4e5adcde5de5a3fbd84b30b..295b027a9f6231130a86a0f04fb90284038a827e 100644
 --- a/libvmaf/src/predict.c
 +++ b/libvmaf/src/predict.c
 @@ -444,7 +444,9 @@ static int vmaf_bootstrap_predict_score_at_index(
@@ -391,7 +394,7 @@ index 93f163fb41fa04cea4e5adcde5de5a3fbd84b30b..809867e69034174e167e17b1ab819c7e
                                            &scores[i], false,
                                            false, flags);
 -        if (err) return err;
-+                        if (err) goto cleanup;
++        if (err) goto cleanup;
  
          // do not override the model's transform/clip behavior
          // write the scores to the feature collector
@@ -400,7 +403,7 @@ index 93f163fb41fa04cea4e5adcde5de5a3fbd84b30b..809867e69034174e167e17b1ab819c7e
                                            feature_collector, index,
                                            &score, true, false, 0);
 -        if (err) return err;
-+                        if (err) goto cleanup;
++        if (err) goto cleanup;
      }
  
      score->type = VMAF_MODEL_COLLECTION_SCORE_BOOTSTRAP;
