@@ -1,0 +1,73 @@
+diff --git a/libvmaf/src/feature/x86/adm_avx2.c b/libvmaf/src/feature/x86/adm_avx2.c
+index 6a7c75fcc0c5501619da1ba9aef5cefe20c50f77..b843772794fc9c5cdcbeabd7998e88f80bb03974 100644
+--- a/libvmaf/src/feature/x86/adm_avx2.c
++++ b/libvmaf/src/feature/x86/adm_avx2.c
+@@ -22,6 +22,10 @@
+ #include "feature/integer_adm.h"
+ #include <immintrin.h>
+ 
++#ifdef _MSC_VER
++#include "compat/msvc/builtins.h"
++#endif
++
+ #define MIN(x, y) (((x) < (y)) ? (x) : (y))
+ #define MAX(x, y) (((x) > (y)) ? (x) : (y))
+ 
+diff --git a/libvmaf/src/feature/x86/adm_avx512.c b/libvmaf/src/feature/x86/adm_avx512.c
+index c171b07e725f9064dbb23ef558db392d5eca7687..25bfc0903bccfb5f77d8596b018bbe2e9f38d585 100644
+--- a/libvmaf/src/feature/x86/adm_avx512.c
++++ b/libvmaf/src/feature/x86/adm_avx512.c
+@@ -23,6 +23,10 @@
+ #include "adm_avx512.h"
+ #include <immintrin.h>
+ 
++#ifdef _MSC_VER
++#include "compat/msvc/builtins.h"
++#endif
++
+ #define MIN(x, y) (((x) < (y)) ? (x) : (y))
+ #define MAX(x, y) (((x) > (y)) ? (x) : (y))
+ 
+diff --git a/libvmaf/src/meson.build b/libvmaf/src/meson.build
+index b19bc98f43629dc13737bef86b41bf0c41b70ec0..5855a3829b67537552a7310ec791139634df3b11 100644
+--- a/libvmaf/src/meson.build
++++ b/libvmaf/src/meson.build
+@@ -296,11 +296,17 @@ if is_asm_enabled
+           feature_src_dir + 'x86/speed_avx2.c',
+       ]
+ 
++      if cc.get_id() == 'msvc'
++          avx2_cflags = ['/arch:AVX2']
++      else
++          avx2_cflags = ['-mavx', '-mavx2', '-mfma']
++      endif
++
+       x86_avx2_static_lib = static_library(
+           'x86_avx2',
+           x86_avx2_sources,
+           include_directories : vmaf_base_include,
+-          c_args : ['-mavx', '-mavx2', '-mfma'] + vmaf_cflags_common,
++          c_args : avx2_cflags + vmaf_cflags_common,
+       )
+ 
+       platform_specific_cpu_objects += x86_avx2_static_lib.extract_all_objects(recursive: true)
+@@ -313,12 +319,17 @@ if is_asm_enabled
+             feature_src_dir + 'x86/speed_avx512.c',
+         ]
+ 
++        if cc.get_id() == 'msvc'
++            avx512_cflags = ['/arch:AVX512']
++        else
++            avx512_cflags = ['-mavx512f', '-mavx512dq', '-mavx512bw', '-mavx512cd', '-mavx512vl']
++        endif
++
+         x86_avx512_static_lib = static_library(
+             'x86_avx512',
+             x86_avx512_sources,
+             include_directories : vmaf_base_include,
+-            c_args : ['-mavx512f', '-mavx512dq', '-mavx512bw', '-mavx512cd', '-mavx512vl'] +
+-                     vmaf_cflags_common,
++            c_args : avx512_cflags + vmaf_cflags_common,
+         )
+ 
+         platform_specific_cpu_objects += x86_avx512_static_lib.extract_all_objects(recursive: true)

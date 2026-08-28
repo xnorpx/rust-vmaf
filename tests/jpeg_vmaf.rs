@@ -21,7 +21,7 @@ impl VmafSession {
     fn new() -> Self {
         let config = VmafConfiguration {
             log_level: VmafLogLevel_VMAF_LOG_LEVEL_NONE,
-            n_threads: 0,
+            n_threads: 2,
             n_subsample: 1,
             cpumask: 0,
             gpumask: 0,

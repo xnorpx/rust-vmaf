@@ -29,13 +29,26 @@ elif host_machine.system() == 'darwin'
 endif
 
 # Header checks
+if cc.has_header('malloc.h', args: test_args)
+    add_project_arguments('-DHAVE_MALLOC_H', language: ['c', 'cpp'])
+endif
+if cc.has_header('alloca.h', args: test_args)
+    add_project_arguments('-DHAVE_ALLOCA_H', language: ['c', 'cpp'])
+endif
+
+msvc_compat_dependency = []
+if cc.get_id() == 'msvc'
+    add_project_arguments('-D_USE_MATH_DEFINES', language: ['c', 'cpp'])
+    msvc_compat_dependency = declare_dependency(
+        include_directories : include_directories('src/compat/msvc'),
+    )
+endif
+
 stdatomic_dependency = []
 if not cc.check_header('stdatomic.h')
     if cc.get_id() == 'msvc'
         # we have a custom replacement for MSVC
-        stdatomic_dependency = declare_dependency(
-            include_directories : include_directories('src/compat/msvc'),
-        )
+        stdatomic_dependency = msvc_compat_dependency
     elif cc.compiles('''int main() { int v = 0; return __atomic_fetch_add(&v, 1, __ATOMIC_SEQ_CST); }''',
                      name : 'GCC-style atomics', args : test_args)
         stdatomic_dependency = declare_dependency(
@@ -44,6 +57,16 @@ if not cc.check_header('stdatomic.h')
     else
         error('Atomics not supported')
     endif
+endif
+
+if cc.check_header('getopt.h', args: test_args)
+    getopt_dependency = declare_dependency(compile_args : '-DHAVE_GETOPT_H')
+else
+    getopt_dependency = declare_dependency(
+        compile_args : '-DHAVE_GETOPT_H',
+        sources: ['src/compat/getopt/getopt.c'],
+        include_directories : include_directories('src/compat/getopt'),
+    )
 endif
 
 subdir('include')

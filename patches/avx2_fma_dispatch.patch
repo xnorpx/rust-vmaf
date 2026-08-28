@@ -1,0 +1,13 @@
+diff --git a/libvmaf/src/x86/cpu.c b/libvmaf/src/x86/cpu.c
+index 1f87fccbbc191f79e6bd4588f5d6ca8478d6c226..33661ae7ef576f3af58435a4fc6b5d6bd5b989f7 100644
+--- a/libvmaf/src/x86/cpu.c
++++ b/libvmaf/src/x86/cpu.c
+@@ -58,7 +58,7 @@ unsigned vmaf_get_cpu_flags_x86(void) {
+         }
+ 
+         /* We only support >128-bit SIMD on x86-64. */
+-        if (X(r.ecx, 0x18000000)) /* OSXSAVE/AVX */ {
++        if (X(r.ecx, 0x18001000)) /* FMA/OSXSAVE/AVX */ {
+             const uint64_t xcr0 = vmaf_cpu_xgetbv(0);
+             if (X(xcr0, 0x00000006)) /* XMM/YMM */ {
+                 if (max_leaf >= 7) {

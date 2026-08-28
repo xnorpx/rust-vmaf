@@ -3,8 +3,8 @@
 # This file tracks the exact version of the vendored VMAF source.
 
 source: https://github.com/Netflix/vmaf
-commit: ec3b1161a5fbdffb59795937f9208cb5fdbd3c3c
-date: 2026-07-09
+commit: f85a853692a8c730d0270cd733c8bb30b5b93b7c
+date: 2026-08-14
 branch: master
 
 # To update, run:

@@ -1,0 +1,296 @@
+diff --git a/libvmaf/meson.build b/libvmaf/meson.build
+index 9ae15b742eed8d1f44f69806fc88781bcae7bb7a..be5594c1723adeadea276c4a957fb5393e0d0a08 100644
+--- a/libvmaf/meson.build
++++ b/libvmaf/meson.build
+@@ -36,13 +36,19 @@ if cc.has_header('alloca.h', args: test_args)
+     add_project_arguments('-DHAVE_ALLOCA_H', language: ['c', 'cpp'])
+ endif
+ 
++msvc_compat_dependency = []
++if cc.get_id() == 'msvc'
++    add_project_arguments('-D_USE_MATH_DEFINES', language: ['c', 'cpp'])
++    msvc_compat_dependency = declare_dependency(
++        include_directories : include_directories('src/compat/msvc'),
++    )
++endif
++
+ stdatomic_dependency = []
+ if not cc.check_header('stdatomic.h')
+     if cc.get_id() == 'msvc'
+         # we have a custom replacement for MSVC
+-        stdatomic_dependency = declare_dependency(
+-            include_directories : include_directories('src/compat/msvc'),
+-        )
++        stdatomic_dependency = msvc_compat_dependency
+     elif cc.compiles('''int main() { int v = 0; return __atomic_fetch_add(&v, 1, __ATOMIC_SEQ_CST); }''',
+                      name : 'GCC-style atomics', args : test_args)
+         stdatomic_dependency = declare_dependency(
+diff --git a/libvmaf/src/compat/msvc/builtins.h b/libvmaf/src/compat/msvc/builtins.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..acfeaa752dee632a8f1ef985dfeefdbd9d2d53fd
+--- /dev/null
++++ b/libvmaf/src/compat/msvc/builtins.h
+@@ -0,0 +1,26 @@
++#ifndef VMAF_MSVC_BUILTINS_H
++#define VMAF_MSVC_BUILTINS_H
++
++#include <intrin.h>
++
++static inline int vmaf_builtin_clz(unsigned value)
++{
++    unsigned long index;
++    return _BitScanReverse(&index, value) ? 31 - (int)index : 32;
++}
++
++static inline int vmaf_builtin_clzll(unsigned long long value)
++{
++#if defined(_M_X64) || defined(_M_ARM64)
++    unsigned long index;
++    return _BitScanReverse64(&index, value) ? 63 - (int)index : 64;
++#else
++    const unsigned high = (unsigned)(value >> 32);
++    return high ? vmaf_builtin_clz(high) : 32 + vmaf_builtin_clz((unsigned)value);
++#endif
++}
++
++#define __builtin_clz vmaf_builtin_clz
++#define __builtin_clzll vmaf_builtin_clzll
++
++#endif
+\ No newline at end of file
+diff --git a/libvmaf/src/compat/msvc/pthread.h b/libvmaf/src/compat/msvc/pthread.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..7797d4e82f6b204059cc0226bf6f11a3899fe2ec
+--- /dev/null
++++ b/libvmaf/src/compat/msvc/pthread.h
+@@ -0,0 +1,117 @@
++#ifndef VMAF_PTHREAD_COMPAT_H
++#define VMAF_PTHREAD_COMPAT_H
++
++#include <errno.h>
++#include <process.h>
++#include <stdint.h>
++#include <stdlib.h>
++#include <windows.h>
++
++typedef SRWLOCK pthread_mutex_t;
++typedef CONDITION_VARIABLE pthread_cond_t;
++typedef HANDLE pthread_t;
++
++typedef struct VmafPthreadStartContext {
++    void *(*start_routine)(void *);
++    void *argument;
++} VmafPthreadStartContext;
++
++static unsigned __stdcall vmaf_pthread_start(void *raw_context)
++{
++    VmafPthreadStartContext *context = raw_context;
++    void *(*start_routine)(void *) = context->start_routine;
++    void *argument = context->argument;
++    free(context);
++    start_routine(argument);
++    return 0;
++}
++
++static inline int pthread_mutex_init(pthread_mutex_t *mutex,
++                                     const void *attributes)
++{
++    (void)attributes;
++    InitializeSRWLock(mutex);
++    return 0;
++}
++
++static inline int pthread_mutex_destroy(pthread_mutex_t *mutex)
++{
++    (void)mutex;
++    return 0;
++}
++
++static inline int pthread_mutex_lock(pthread_mutex_t *mutex)
++{
++    AcquireSRWLockExclusive(mutex);
++    return 0;
++}
++
++static inline int pthread_mutex_unlock(pthread_mutex_t *mutex)
++{
++    ReleaseSRWLockExclusive(mutex);
++    return 0;
++}
++
++static inline int pthread_cond_init(pthread_cond_t *condition,
++                                    const void *attributes)
++{
++    (void)attributes;
++    InitializeConditionVariable(condition);
++    return 0;
++}
++
++static inline int pthread_cond_destroy(pthread_cond_t *condition)
++{
++    (void)condition;
++    return 0;
++}
++
++static inline int pthread_cond_wait(pthread_cond_t *condition,
++                                    pthread_mutex_t *mutex)
++{
++    if (SleepConditionVariableSRW(condition, mutex, INFINITE, 0)) return 0;
++    const DWORD error = GetLastError();
++    return error ? (int)error : EINVAL;
++}
++
++static inline int pthread_cond_signal(pthread_cond_t *condition)
++{
++    WakeConditionVariable(condition);
++    return 0;
++}
++
++static inline int pthread_cond_broadcast(pthread_cond_t *condition)
++{
++    WakeAllConditionVariable(condition);
++    return 0;
++}
++
++static inline int pthread_create(pthread_t *thread, const void *attributes,
++                                 void *(*start_routine)(void *), void *argument)
++{
++    (void)attributes;
++    VmafPthreadStartContext *context = malloc(sizeof(*context));
++    if (!context) return ENOMEM;
++    context->start_routine = start_routine;
++    context->argument = argument;
++
++    const uintptr_t handle =
++        _beginthreadex(NULL, 0, vmaf_pthread_start, context, 0, NULL);
++    if (!handle) {
++        const int error = errno ? errno : EAGAIN;
++        free(context);
++        return error;
++    }
++
++    *thread = (HANDLE)handle;
++    return 0;
++}
++
++static inline int pthread_detach(pthread_t thread)
++{
++    if (CloseHandle(thread)) return 0;
++    const DWORD error = GetLastError();
++    return error ? (int)error : EINVAL;
++}
++
++#endif
+\ No newline at end of file
+diff --git a/libvmaf/src/compat/msvc/stdatomic.h b/libvmaf/src/compat/msvc/stdatomic.h
+index 979ee2ba8234489c23c65478720c41bd7bfa5f91..7540775fd71a9510e80968c727ab59572c9dbaf0 100644
+--- a/libvmaf/src/compat/msvc/stdatomic.h
++++ b/libvmaf/src/compat/msvc/stdatomic.h
+@@ -39,8 +39,6 @@
+ 
+ #include <windows.h>
+ 
+-#include "common/attributes.h"
+-
+ typedef volatile LONG  __declspec(align(32)) atomic_int;
+ typedef volatile ULONG __declspec(align(32)) atomic_uint;
+ 
+diff --git a/libvmaf/src/compat/msvc/unistd.h b/libvmaf/src/compat/msvc/unistd.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..6269ebda300df183de51b2d6e90ce9eb2d485ba0
+--- /dev/null
++++ b/libvmaf/src/compat/msvc/unistd.h
+@@ -0,0 +1,12 @@
++#ifndef VMAF_MSVC_UNISTD_H
++#define VMAF_MSVC_UNISTD_H
++
++#include <direct.h>
++#include <io.h>
++#include <sys/types.h>
++
++#define fileno _fileno
++#define isatty _isatty
++#define mkdir _mkdir
++
++#endif
+\ No newline at end of file
+diff --git a/libvmaf/src/feature/integer_adm.c b/libvmaf/src/feature/integer_adm.c
+index 5a1ea7d8f6474844cbf7e14d3c3b7cce3244bcaa..925b2233412f66665581d5b7468a932ac35d9302 100644
+--- a/libvmaf/src/feature/integer_adm.c
++++ b/libvmaf/src/feature/integer_adm.c
+@@ -25,6 +25,10 @@
+ #include "integer_adm.h"
+ #include "log.h"
+ 
++#ifdef _MSC_VER
++#include "compat/msvc/builtins.h"
++#endif
++
+ #if ARCH_X86
+ #include "x86/adm_avx2.h"
+ #if HAVE_AVX512
+diff --git a/libvmaf/src/feature/integer_vif.h b/libvmaf/src/feature/integer_vif.h
+index 42b4108b4bc715b80f1b93e0fe498e4f7be97026..c565e605a9b496c6695019d69c02e2fd7942ee53 100644
+--- a/libvmaf/src/feature/integer_vif.h
++++ b/libvmaf/src/feature/integer_vif.h
+@@ -129,16 +129,7 @@ VifResiduals vif_compute_line_residuals(VifPublicState *s, unsigned from,
+ 
+ 
+ #ifdef _MSC_VER
+-#include <intrin.h>
+-
+-static inline int __builtin_clz(unsigned x) {
+-    return (int)__lzcnt(x);
+-}
+-
+-static inline int __builtin_clzll(unsigned long long x) {
+-    return (int)__lzcnt64(x);
+-}
+-
++#include "compat/msvc/builtins.h"
+ #endif
+ 
+ static inline int32_t log2_32(const uint16_t *log2_table, uint32_t temp)
+diff --git a/libvmaf/src/feature/mkdirp.h b/libvmaf/src/feature/mkdirp.h
+index 02371fb571dbcd6ad00ef03269e5eb93752e15ca..d2bb3de04f1c67f0bbdb8b3f6eaceb5d1efd5fbe 100644
+--- a/libvmaf/src/feature/mkdirp.h
++++ b/libvmaf/src/feature/mkdirp.h
+@@ -12,6 +12,10 @@
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ 
++#ifdef _MSC_VER
++typedef int mode_t;
++#endif
++
+ /*
+  * Recursively `mkdir(path, mode)`
+  */
+diff --git a/libvmaf/src/meson.build b/libvmaf/src/meson.build
+index 6900c572d9edfa0f17312d1e84046ccc0c83d396..b19bc98f43629dc13737bef86b41bf0c41b70ec0 100644
+--- a/libvmaf/src/meson.build
++++ b/libvmaf/src/meson.build
+@@ -548,7 +548,11 @@ libvmaf_feature_static_lib = static_library(
+     'libvmaf_feature',
+     libvmaf_feature_sources,
+     include_directories : [libvmaf_include, vmaf_include, cuda_dir],
+-    dependencies: [stdatomic_dependency, cuda_dependency],
++    dependencies: [
++        stdatomic_dependency,
++        msvc_compat_dependency,
++        cuda_dependency,
++    ],
+     objects: common_cuda_objects
+ )
+ 
+@@ -607,8 +611,9 @@ libvmaf = library(
+       thread_lib,
+       math_lib,
+       stdatomic_dependency,
++            msvc_compat_dependency,
+       cuda_dependency,
+-	  rev_dep
++            rev_dep,
+     ],
+     objects : [
+         platform_specific_cpu_objects,

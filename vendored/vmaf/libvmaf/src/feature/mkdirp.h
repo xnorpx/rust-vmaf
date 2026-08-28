@@ -12,6 +12,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#ifdef _MSC_VER
+typedef int mode_t;
+#endif
+
 /*
  * Recursively `mkdir(path, mode)`
  */

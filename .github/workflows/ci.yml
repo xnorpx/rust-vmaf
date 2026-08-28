@@ -42,6 +42,11 @@ jobs:
             os: ubuntu-latest
             rust: stable
             cargo_args: '--no-default-features'
+          - name: Linux x86_64 (native CPU)
+            os: ubuntu-latest
+            rust: stable
+            cargo_args: '--all-features'
+            rustflags: '-C target-cpu=native'
           - name: Linux ARM64
             os: ubuntu-24.04-arm
             rust: stable
@@ -78,6 +83,8 @@ jobs:
 
       - name: Build and test
         run: cargo test --verbose ${{ matrix.cargo_args }}
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags || '' }}
 
   build-windows:
     name: Windows x86_64 (GNU)
@@ -110,6 +117,45 @@ jobs:
 
       - name: Build and test
         run: cargo test --target x86_64-pc-windows-gnu --verbose
+
+  build-windows-msvc:
+    name: Windows x86_64 (MSVC)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Install native dependencies
+        run: |
+          python -m pip install meson ninja
+          choco install nasm --no-progress -y
+          $tools = Join-Path $env:RUNNER_TEMP 'vmaf-tools'
+          New-Item -ItemType Directory -Force -Path $tools | Out-Null
+          Copy-Item 'C:\Program Files\Git\usr\bin\xxd.exe' $tools
+          $tools | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & (Join-Path $tools 'xxd.exe') -v
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build and test
+        run: cargo test --target x86_64-pc-windows-msvc --verbose
+
+      - name: Build and test with native CPU tuning
+        run: cargo test --target x86_64-pc-windows-msvc --verbose
+        env:
+          CARGO_TARGET_DIR: target/native
+          RUSTFLAGS: -C target-cpu=native
 
   build-ios:
     name: iOS compile and link
@@ -240,6 +286,11 @@ jobs:
 
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Test build configuration
+        run: |
+          rustc --edition=2021 --test build.rs -o target/build-script-tests
+          target/build-script-tests
 
       - name: Verify package
         run: cargo package

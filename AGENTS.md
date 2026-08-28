@@ -7,15 +7,18 @@ This repository publishes `vmaf-head-sys`, raw Rust FFI bindings to a statically
 ## Generated And Vendored Files
 
 - Do not edit `src/bindings.rs` by hand. Change `vendor_vmaf.py`, then run `python3 vendor_vmaf.py --bindings-only`.
-- Update `vendored/vmaf` only through `python3 vendor_vmaf.py`. Preserve upstream source, licenses, formatting, and model data byte-for-byte.
+- Update `vendored/vmaf` only through `python3 vendor_vmaf.py`. Keep local source changes in ordered `patches/*.patch` files; the script applies them after copying upstream. Never edit the vendored tree by hand.
+- Keep patches focused, preserve untouched upstream source and model data byte-for-byte, and fail clearly when a patch no longer applies.
 - `vendored/VMAF_VERSION` must identify the exact upstream commit. Verify it with `python3 check_vmaf_version.py`.
 - Keep bindgen output target-independent. In particular, retain `--no-layout-tests` so committed bindings compile on 32-bit targets.
 
 ## Native Build Invariants
 
 - `build.rs` owns Meson configuration, static linking, platform runtime libraries, and generated iOS/Android cross files.
-- Meson and Ninja are required for native builds. `xxd` is required for built-in models.
-- x86 and x86_64 builds always compile NASM and AVX2 paths, including with `--no-default-features`; runtime CPUID dispatch must remain enabled.
+- Meson and Ninja are required for native builds. `xxd` is required for built-in models. NASM 2.14 or later is required on x86 targets so AVX-512 support cannot silently degrade.
+- x86 and x86_64 builds compile NASM and AVX2/AVX-512 paths, including with `--no-default-features` and MSVC; runtime CPUID and operating-system dispatch checks must remain enabled.
+- `build.rs` propagates Rust native CPU and explicit x86 target-feature settings to the C/C++ compiler. Host-native flags must never be applied while cross-compiling.
+- MSVC builds use private pthread and POSIX translation headers added by the vendor patch under `vendored/vmaf/libvmaf/src/compat/msvc`.
 - AArch64 builds use VMAF's NEON paths when the `asm` feature is enabled.
 - Preserve compile-and-link support for every target in `.github/workflows/ci.yml`, including iOS device/simulators and all four Android ABIs.
 - Android uses NDK libc++ (`c++_shared`), not GNU `stdc++`. NDK r29 x86 links require Clang builtins through `cargo-ndk --link-builtins`.
