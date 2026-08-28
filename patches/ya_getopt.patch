@@ -1,0 +1,578 @@
+From 60355795e90fbfa48ba7afdfc9d451206d7223ac Mon Sep 17 00:00:00 2001
+From: "David C. Manuelda" <StormByte@gmail.com>
+Date: Sun, 29 Mar 2026 05:44:04 +0200
+Subject: [PATCH] PR #1410
+
+Signed-off-by: David C. Manuelda <StormByte@gmail.com>
+---
+ libvmaf/meson.build                 |  10 +
+ libvmaf/src/compat/getopt/README.md |  38 ++++
+ libvmaf/src/compat/getopt/getopt.c  | 318 ++++++++++++++++++++++++++++
+ libvmaf/src/compat/getopt/getopt.h  |  77 +++++++
+ libvmaf/test/meson.build            |   7 +-
+ libvmaf/test/test_cli_parse.c       |   9 +-
+ libvmaf/tools/cli_parse.c           |   4 +
+ libvmaf/tools/meson.build           |   2 +-
+ 8 files changed, 459 insertions(+), 6 deletions(-)
+ create mode 100644 libvmaf/src/compat/getopt/README.md
+ create mode 100644 libvmaf/src/compat/getopt/getopt.c
+ create mode 100644 libvmaf/src/compat/getopt/getopt.h
+
+diff --git a/libvmaf/meson.build b/libvmaf/meson.build
+index ac5bf61..50f64a3 100644
+--- a/libvmaf/meson.build
++++ b/libvmaf/meson.build
+@@ -46,6 +46,16 @@ if not cc.check_header('stdatomic.h')
+     endif
+ endif
+ 
++if cc.check_header('getopt.h', args: test_args)
++    getopt_dependency = declare_dependency(compile_args : '-DHAVE_GETOPT_H')
++else
++    getopt_dependency = declare_dependency(
++        compile_args : '-DHAVE_GETOPT_H',
++        sources: ['src/compat/getopt/getopt.c'],
++        include_directories : include_directories('src/compat/getopt'),
++    )
++endif
++
+ subdir('include')
+ subdir('src')
+ subdir('tools')
+diff --git a/libvmaf/src/compat/getopt/README.md b/libvmaf/src/compat/getopt/README.md
+new file mode 100644
+index 0000000..9009867
+--- /dev/null
++++ b/libvmaf/src/compat/getopt/README.md
+@@ -0,0 +1,38 @@
++ya_getopt - Yet another getopt
++==============================
++
++What is ya_getopt.
++------------------
++
++Ya_getopt is a drop-in replacement of [GNU C library getopt](http://man7.org/linux/man-pages/man3/getopt.3.html).
++`getopt()`, `getopt_long()` and `getopt_long_only()` are implemented excluding the following GNU extension features.
++
++1. If *optstring* contains **W** followed by a semicolon, then **-W** **foo** is
++   treated as the long option **--foo**.
++
++2. \_\<PID>\_GNU\_nonoption\_argv\_flags\_
++
++The license is 2-clause BSD-style license. You can use the Linux getopt compatible function
++under Windows, Solaris and so on without having to worry about license issue.
++
++Note for contributors
++---------------------
++
++Don't send me a patch if you have looked at GNU C library getopt source code.
++That's because I made this with clean room design to avoid the influence of the GNU LGPL.
++
++Please make a test script passed by the GNU C library getopt but not by ya_getopt instead.
++
++License
++-------
++
++2-clause BSD-style license
++
++Other getopt functions
++----------------------
++
++* [public domain AT&T getopt](https://www.google.co.jp/search?q=public+domain+at%26t+getopt) public domain, no getopt_long, no getopt_long_only, no argv permutation
++* [Free Getopt](http://freegetopt.sourceforge.net/) 3-clause BSD-style licence, no getopt_long, no getopt_long_only
++* [getopt_port](https://github.com/kimgr/getopt_port/) 3-clause BSD-style licence, no getopt_long_only, no argv permutation
++* [XGetopt - A Unix-compatible getopt() for MFC and Win32](http://www.codeproject.com/Articles/1940/XGetopt-A-Unix-compatible-getopt-for-MFC-and-Win32)
++* [Full getopt Port for Unicode and Multibyte Microsoft Visual C, C++, or MFC Projects](http://www.codeproject.com/Articles/157001/Full-getopt-Port-for-Unicode-and-Multibyte-Microso) LGPL
+diff --git a/libvmaf/src/compat/getopt/getopt.c b/libvmaf/src/compat/getopt/getopt.c
+new file mode 100644
+index 0000000..a6ffca9
+--- /dev/null
++++ b/libvmaf/src/compat/getopt/getopt.c
+@@ -0,0 +1,318 @@
++/* -*- indent-tabs-mode: nil -*-
++ *
++ * ya_getopt  - Yet another getopt
++ * https://github.com/kubo/ya_getopt
++ *
++ * Copyright 2015 Kubo Takehiro <kubo@jiubao.org>
++ *
++ * Redistribution and use in source and binary forms, with or without modification, are
++ * permitted provided that the following conditions are met:
++ *
++ *    1. Redistributions of source code must retain the above copyright notice, this list of
++ *       conditions and the following disclaimer.
++ *
++ *    2. Redistributions in binary form must reproduce the above copyright notice, this list
++ *       of conditions and the following disclaimer in the documentation and/or other materials
++ *       provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHORS ''AS IS'' AND ANY EXPRESS OR IMPLIED
++ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
++ * FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> OR
++ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
++ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
++ * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
++ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
++ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ *
++ * The views and conclusions contained in the software and documentation are those of the
++ * authors and should not be interpreted as representing official policies, either expressed
++ * or implied, of the authors.
++ *
++ */
++#include <stdio.h>
++#include <stdarg.h>
++#include <stdlib.h>
++#include <string.h>
++#include "getopt.h"
++
++char *ya_optarg = NULL;
++int ya_optind = 1;
++int ya_opterr = 1;
++int ya_optopt = '?';
++static char *ya_optnext = NULL;
++static int posixly_correct = -1;
++static int handle_nonopt_argv = 0;
++
++static void ya_getopt_error(const char *optstring, const char *format, ...);
++static void check_gnu_extension(const char *optstring);
++static int ya_getopt_internal(int argc, char * const argv[], const char *optstring, const struct option *longopts, int *longindex, int long_only);
++static int ya_getopt_shortopts(int argc, char * const argv[], const char *optstring, int long_only);
++static int ya_getopt_longopts(int argc, char * const argv[], char *arg, const char *optstring, const struct option *longopts, int *longindex, int *long_only_flag);
++
++static void ya_getopt_error(const char *optstring, const char *format, ...)
++{
++    if (ya_opterr && optstring[0] != ':') {
++        va_list ap;
++        va_start(ap, format);
++        vfprintf(stderr, format, ap);
++        va_end(ap);
++    }
++}
++
++static void check_gnu_extension(const char *optstring)
++{
++    if (optstring[0] == '+' || getenv("POSIXLY_CORRECT") != NULL) {
++        posixly_correct = 1;
++    } else {
++        posixly_correct = 0;
++    }
++    if (optstring[0] == '-') {
++        handle_nonopt_argv = 1;
++    } else {
++        handle_nonopt_argv = 0;
++    }
++}
++
++static int is_option(const char *arg)
++{
++    return arg[0] == '-' && arg[1] != '\0';
++}
++
++int ya_getopt(int argc, char * const argv[], const char *optstring)
++{
++    return ya_getopt_internal(argc, argv, optstring, NULL, NULL, 0);
++}
++
++int ya_getopt_long(int argc, char * const argv[], const char *optstring, const struct option *longopts, int *longindex)
++{
++    return ya_getopt_internal(argc, argv, optstring, longopts, longindex, 0);
++}
++
++int ya_getopt_long_only(int argc, char * const argv[], const char *optstring, const struct option *longopts, int *longindex)
++{
++    return ya_getopt_internal(argc, argv, optstring, longopts, longindex, 1);
++}
++
++static int ya_getopt_internal(int argc, char * const argv[], const char *optstring, const struct option *longopts, int *longindex, int long_only)
++{
++    static int start, end;
++
++    if (ya_optopt == '?') {
++        ya_optopt = 0;
++    }
++
++    if (posixly_correct == -1) {
++        check_gnu_extension(optstring);
++    }
++
++    if (ya_optind == 0) {
++        check_gnu_extension(optstring);
++        ya_optind = 1;
++        ya_optnext = NULL;
++    }
++
++    switch (optstring[0]) {
++    case '+':
++    case '-':
++        optstring++;
++    }
++
++    if (ya_optnext == NULL && start != 0) {
++        int last_pos = ya_optind - 1;
++
++        ya_optind -= end - start;
++        if (ya_optind <= 0) {
++            ya_optind = 1;
++        }
++        while (start < end--) {
++            int i;
++            char *arg = argv[end];
++
++            for (i = end; i < last_pos; i++) {
++                ((char **)argv)[i] = argv[i + 1];
++            }
++            ((char const **)argv)[i] = arg;
++            last_pos--;
++        }
++        start = 0;
++    }
++
++    if (ya_optind >= argc) {
++        ya_optarg = NULL;
++        return -1;
++    }
++    if (ya_optnext == NULL) {
++        const char *arg = argv[ya_optind];
++        if (!is_option(arg)) {
++            if (handle_nonopt_argv) {
++                ya_optarg = argv[ya_optind++];
++                start = 0;
++                return 1;
++            } else if (posixly_correct) {
++                ya_optarg = NULL;
++                return -1;
++            } else {
++                int i;
++
++                start = ya_optind;
++                for (i = ya_optind + 1; i < argc; i++) {
++                    if (is_option(argv[i])) {
++                        end = i;
++                        break;
++                    }
++                }
++                if (i == argc) {
++                    ya_optarg = NULL;
++                    return -1;
++                }
++                ya_optind = i;
++                arg = argv[ya_optind];
++            }
++        }
++        if (strcmp(arg, "--") == 0) {
++            ya_optind++;
++            return -1;
++        }
++        if (longopts != NULL && arg[1] == '-') {
++            return ya_getopt_longopts(argc, argv, argv[ya_optind] + 2, optstring, longopts, longindex, NULL);
++        }
++    }
++
++    if (ya_optnext == NULL) {
++        ya_optnext = argv[ya_optind] + 1;
++    }
++    if (long_only) {
++        int long_only_flag = 0;
++        int rv = ya_getopt_longopts(argc, argv, ya_optnext, optstring, longopts, longindex, &long_only_flag);
++        if (!long_only_flag) {
++            ya_optnext = NULL;
++            return rv;
++        }
++    }
++
++    return ya_getopt_shortopts(argc, argv, optstring, long_only);
++}
++
++static int ya_getopt_shortopts(int argc, char * const argv[], const char *optstring, int long_only)
++{
++    int opt = *ya_optnext;
++    const char *os = strchr(optstring, opt);
++
++    if (os == NULL) {
++        ya_optarg = NULL;
++        if (long_only) {
++            ya_getopt_error(optstring, "%s: unrecognized option '-%s'\n", argv[0], ya_optnext);
++            ya_optind++;
++            ya_optnext = NULL;
++        } else {
++            ya_optopt = opt;
++            ya_getopt_error(optstring, "%s: invalid option -- '%c'\n", argv[0], opt);
++            if (*(++ya_optnext) == 0) {
++                ya_optind++;
++                ya_optnext = NULL;
++            }
++        }
++        return '?';
++    }
++    if (os[1] == ':') {
++        if (ya_optnext[1] == 0) {
++            ya_optind++;
++            ya_optnext = NULL;
++            if (os[2] == ':') {
++                /* optional argument */
++                ya_optarg = NULL;
++            } else {
++                if (ya_optind == argc) {
++                    ya_optarg = NULL;
++                    ya_optopt = opt;
++                    ya_getopt_error(optstring, "%s: option requires an argument -- '%c'\n", argv[0], opt);
++                    if (optstring[0] == ':') {
++                        return ':';
++                    } else {
++                        return '?';
++                    }
++                }
++                ya_optarg = argv[ya_optind];
++                ya_optind++;
++            }
++        } else {
++            ya_optarg = ya_optnext + 1;
++            ya_optind++;
++        }
++        ya_optnext = NULL;
++    } else {
++        ya_optarg = NULL;
++        if (ya_optnext[1] == 0) {
++            ya_optnext = NULL;
++            ya_optind++;
++        } else {
++            ya_optnext++;
++        }
++    }
++    return opt;
++}
++
++static int ya_getopt_longopts(int argc, char * const argv[], char *arg, const char *optstring, const struct option *longopts, int *longindex, int *long_only_flag)
++{
++    char *val = NULL;
++    const struct option *opt;
++    size_t namelen;
++    int idx;
++
++    for (idx = 0; longopts[idx].name != NULL; idx++) {
++        opt = &longopts[idx];
++        namelen = strlen(opt->name);
++        if (strncmp(arg, opt->name, namelen) == 0) {
++            switch (arg[namelen]) {
++            case '\0':
++                switch (opt->has_arg) {
++                case ya_required_argument:
++                    ya_optind++;
++                    if (ya_optind == argc) {
++                        ya_optarg = NULL;
++                        ya_optopt = opt->val;
++                        ya_getopt_error(optstring, "%s: option '--%s' requires an argument\n", argv[0], opt->name);
++                        if (optstring[0] == ':') {
++                            return ':';
++                        } else {
++                            return '?';
++                        }
++                    }
++                    val = argv[ya_optind];
++                    break;
++                }
++                goto found;
++            case '=':
++                if (opt->has_arg == ya_no_argument) {
++                    const char *hyphens = (argv[ya_optind][1] == '-') ? "--" : "-";
++
++                    ya_optind++;
++                    ya_optarg = NULL;
++                    ya_optopt = opt->val;
++                    ya_getopt_error(optstring, "%s: option '%s%s' doesn't allow an argument\n", argv[0], hyphens, opt->name);
++                    return '?';
++                }
++                val = arg + namelen + 1;
++                goto found;
++            }
++        }
++    }
++    if (long_only_flag) {
++        *long_only_flag = 1;
++    } else {
++        ya_getopt_error(optstring, "%s: unrecognized option '%s'\n", argv[0], argv[ya_optind]);
++        ya_optind++;
++    }
++    return '?';
++found:
++    ya_optarg = val;
++    ya_optind++;
++    if (opt->flag) {
++        *opt->flag = opt->val;
++    }
++    if (longindex) {
++        *longindex = idx;
++    }
++    return opt->flag ? 0 : opt->val;
++}
+diff --git a/libvmaf/src/compat/getopt/getopt.h b/libvmaf/src/compat/getopt/getopt.h
+new file mode 100644
+index 0000000..4244c67
+--- /dev/null
++++ b/libvmaf/src/compat/getopt/getopt.h
+@@ -0,0 +1,77 @@
++/* -*- indent-tabs-mode: nil -*-
++ *
++ * ya_getopt  - Yet another getopt
++ * https://github.com/kubo/ya_getopt
++ *
++ * Copyright 2015 Kubo Takehiro <kubo@jiubao.org>
++ *
++ * Redistribution and use in source and binary forms, with or without modification, are
++ * permitted provided that the following conditions are met:
++ *
++ *    1. Redistributions of source code must retain the above copyright notice, this list of
++ *       conditions and the following disclaimer.
++ *
++ *    2. Redistributions in binary form must reproduce the above copyright notice, this list
++ *       of conditions and the following disclaimer in the documentation and/or other materials
++ *       provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHORS ''AS IS'' AND ANY EXPRESS OR IMPLIED
++ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
++ * FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> OR
++ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
++ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
++ * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
++ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
++ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ *
++ * The views and conclusions contained in the software and documentation are those of the
++ * authors and should not be interpreted as representing official policies, either expressed
++ * or implied, of the authors.
++ *
++ */
++#ifndef YA_GETOPT_H
++#define YA_GETOPT_H 1
++
++#if defined(__cplusplus)
++extern "C" {
++#endif
++
++#define ya_no_argument        0
++#define ya_required_argument  1
++#define ya_optional_argument  2
++
++struct option {
++    const char *name;
++    int has_arg;
++    int *flag;
++    int val;
++};
++
++int ya_getopt(int argc, char * const argv[], const char *optstring);
++int ya_getopt_long(int argc, char * const argv[], const char *optstring,
++                   const struct option *longopts, int *longindex);
++int ya_getopt_long_only(int argc, char * const argv[], const char *optstring,
++                        const struct option *longopts, int *longindex);
++
++extern char *ya_optarg;
++extern int ya_optind, ya_opterr, ya_optopt;
++
++#ifndef YA_GETOPT_NO_COMPAT_MACRO
++#define getopt ya_getopt
++#define getopt_long ya_getopt_long
++#define getopt_long_only ya_getopt_long_only
++#define optarg ya_optarg
++#define optind ya_optind
++#define opterr ya_opterr
++#define optopt ya_optopt
++#define no_argument ya_no_argument
++#define required_argument ya_required_argument
++#define optional_argument ya_optional_argument
++#endif
++
++#if defined(__cplusplus)
++}
++#endif
++
++#endif
+diff --git a/libvmaf/test/meson.build b/libvmaf/test/meson.build
+index 17f1c7e..8e673fc 100644
+--- a/libvmaf/test/meson.build
++++ b/libvmaf/test/meson.build
+@@ -38,7 +38,7 @@ test_log = executable('test_log',
+ test_thread_pool = executable('test_thread_pool',
+     ['test.c', 'test_thread_pool.c', '../src/thread_pool.c'],
+     include_directories : [libvmaf_inc, test_inc, include_directories('../src/')],
+-    dependencies : thread_lib,
++    dependencies : [thread_lib, getopt_dependency]
+ )
+ 
+ test_model = executable('test_model',
+@@ -66,7 +66,9 @@ test_feature_extractor = executable('test_feature_extractor',
+      '../src/dict.c', '../src/opt.c', '../src/log.c', '../src/predict.c',
+      '../src/metadata_handler.c'],
+     include_directories : [libvmaf_inc, test_inc, include_directories('../src/')],
+-    dependencies : [math_lib, stdatomic_dependency, thread_lib, cuda_dependency],
++    c_args : vmaf_cflags_common,
++    cpp_args : vmaf_cflags_common,
++    dependencies : [math_lib, stdatomic_dependency, thread_lib, cuda_dependency, getopt_dependency],
+     objects : [
+       common_cuda_objects,
+       platform_specific_cpu_objects,
+@@ -122,6 +124,7 @@ test_cli_parse = executable('test_cli_parse',
+     include_directories : [libvmaf_inc, test_inc, include_directories('../src/'), include_directories('../tools/')],
+     link_with : get_option('default_library') == 'both' ? libvmaf.get_static_lib() : libvmaf,
+     c_args : [compat_cflags],
++    dependencies : getopt_dependency
+ )
+ 
+ test_psnr = executable('test_psnr',
+diff --git a/libvmaf/test/test_cli_parse.c b/libvmaf/test/test_cli_parse.c
+index 7ba87ba..1654222 100644
+--- a/libvmaf/test/test_cli_parse.c
++++ b/libvmaf/test/test_cli_parse.c
+@@ -15,13 +15,16 @@
+  *     limitations under the License.
+  *
+  */
+-
+-#include <getopt.h>
+-
+ #include "test.h"
+ 
+ #include "cli_parse.h"
+ 
++#ifdef HAVE_GETOPT_H
++#include <getopt.h>
++#else
++#error "Meson target is missing getopt_dependency"
++#endif
++
+ static int cli_free_dicts(CLISettings *settings) {
+     for (unsigned i = 0; i < settings->feature_cnt; i++) {
+         int err = vmaf_feature_dictionary_free(&(settings->feature_cfg[i].opts_dict));
+diff --git a/libvmaf/tools/cli_parse.c b/libvmaf/tools/cli_parse.c
+index 4f8281a..08340b0 100644
+--- a/libvmaf/tools/cli_parse.c
++++ b/libvmaf/tools/cli_parse.c
+@@ -1,5 +1,9 @@
+ #include <assert.h>
++#ifdef HAVE_GETOPT_H
+ #include <getopt.h>
++#else
++#error "Meson target is missing getopt_dependency"
++#endif
+ #include <stdarg.h>
+ #include <stdlib.h>
+ #include <stdio.h>
+diff --git a/libvmaf/tools/meson.build b/libvmaf/tools/meson.build
+index 79f3366..a92bbff 100644
+--- a/libvmaf/tools/meson.build
++++ b/libvmaf/tools/meson.build
+@@ -11,7 +11,7 @@ vmaf = executable(
+     'vmaf',
+     ['vmaf.c', 'cli_parse.c', 'y4m_input.c', 'vidinput.c', 'yuv_input.c'],
+     include_directories : [libvmaf_inc, vmaf_include],
+-    dependencies: [stdatomic_dependency, cuda_dependency],
++    dependencies: [stdatomic_dependency, cuda_dependency, getopt_dependency],
+     c_args : [vmaf_cflags_common, compat_cflags],
+     link_with : get_option('default_library') == 'both' ? libvmaf.get_static_lib() : libvmaf,
+     install : true,
+-- 
+2.50.1 (Apple Git-155)
+

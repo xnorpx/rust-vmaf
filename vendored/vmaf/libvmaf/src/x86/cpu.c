@@ -58,7 +58,7 @@ unsigned vmaf_get_cpu_flags_x86(void) {
         }
 
         /* We only support >128-bit SIMD on x86-64. */
-        if (X(r.ecx, 0x18000000)) /* OSXSAVE/AVX */ {
+        if (X(r.ecx, 0x18001000)) /* FMA/OSXSAVE/AVX */ {
             const uint64_t xcr0 = vmaf_cpu_xgetbv(0);
             if (X(xcr0, 0x00000006)) /* XMM/YMM */ {
                 if (max_leaf >= 7) {

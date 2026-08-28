@@ -1,0 +1,179 @@
+From 31648ac5f07ab918a3cc95bf7c17cf097894f1c0 Mon Sep 17 00:00:00 2001
+From: "David C. Manuelda" <StormByte@gmail.com>
+Date: Sun, 29 Mar 2026 15:13:31 +0200
+Subject: [PATCH] PR #1428
+
+Signed-off-by: David C. Manuelda <StormByte@gmail.com>
+---
+ libvmaf/meson.build                   |  7 +++++++
+ libvmaf/src/libvmaf.c                 |  8 +++++++-
+ libvmaf/src/predict.c                 | 10 ++++++++--
+ libvmaf/src/read_json_model.c         | 10 ++++++++--
+ libvmaf/test/test_cambi.c             |  2 +-
+ libvmaf/test/test_feature_extractor.c |  2 +-
+ libvmaf/tools/vmaf.c                  |  8 +++++++-
+ 7 files changed, 39 insertions(+), 8 deletions(-)
+
+diff --git a/libvmaf/meson.build b/libvmaf/meson.build
+index 50f64a3..ede16ad 100644
+--- a/libvmaf/meson.build
++++ b/libvmaf/meson.build
+@@ -29,6 +29,13 @@ elif host_machine.system() == 'darwin'
+ endif
+ 
+ # Header checks
++if cc.has_header('malloc.h', args: test_args)
++    add_project_arguments('-DHAVE_MALLOC_H', language: ['c', 'cpp'])
++endif
++if cc.has_header('alloca.h', args: test_args)
++    add_project_arguments('-DHAVE_ALLOCA_H', language: ['c', 'cpp'])
++endif
++
+ stdatomic_dependency = []
+ if not cc.check_header('stdatomic.h')
+     if cc.get_id() == 'msvc'
+diff --git a/libvmaf/src/libvmaf.c b/libvmaf/src/libvmaf.c
+index f914dda..f1bd042 100644
+--- a/libvmaf/src/libvmaf.c
++++ b/libvmaf/src/libvmaf.c
+@@ -22,6 +22,12 @@
+ #include <stdio.h>
+ #include <stdint.h>
+ #include <stdlib.h>
++#ifdef HAVE_MALLOC_H
++#include <malloc.h>
++#endif
++#ifdef HAVE_ALLOCA_H
++#include <alloca.h>
++#endif
+ #include <string.h>
+ #include <time.h>
+ 
+@@ -1093,7 +1099,7 @@ int vmaf_score_pooled_model_collection(VmafContext *vmaf,
+     const char *suffix_stddev = "_stddev";
+     const size_t name_sz =
+         strlen(model_collection->name) + strlen(suffix_lo) + 1;
+-    char name[name_sz];
++    char *name = alloca(name_sz);
+     memset(name, 0, name_sz);
+ 
+     snprintf(name, name_sz, "%s%s", model_collection->name, suffix_bagging);
+diff --git a/libvmaf/src/predict.c b/libvmaf/src/predict.c
+index 93f163f..8cdbd78 100644
+--- a/libvmaf/src/predict.c
++++ b/libvmaf/src/predict.c
+@@ -21,6 +21,12 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
++#ifdef HAVE_MALLOC_H
++#include <malloc.h>
++#endif
++#ifdef HAVE_ALLOCA_H
++#include <alloca.h>
++#endif
+ 
+ #include "dict.h"
+ #include "feature/alias.h"
+@@ -444,7 +450,7 @@ static int vmaf_bootstrap_predict_score_at_index(
+                                         VmafModelCollectionScore *score)
+ {
+     int err = 0;
+-    double scores[model_collection->cnt];
++    double *scores = alloca(model_collection->cnt * sizeof(*scores));
+ 
+     for (unsigned i = 0; i < model_collection->cnt; i++) {
+         // mean, stddev, etc. are calculated on untransformed/unclipped scores
+@@ -510,7 +516,7 @@ static int vmaf_bootstrap_predict_score_at_index(
+     const char *suffix_stddev = "_stddev";
+     const size_t name_sz =
+         strlen(model_collection->name) + strlen(suffix_lo) + 1;
+-    char name[name_sz];
++    char *name = alloca(name_sz);
+     memset(name, 0, name_sz);
+ 
+     snprintf(name, name_sz, "%s%s", model_collection->name, suffix_bagging);
+diff --git a/libvmaf/src/read_json_model.c b/libvmaf/src/read_json_model.c
+index cea8438..f044881 100644
+--- a/libvmaf/src/read_json_model.c
++++ b/libvmaf/src/read_json_model.c
+@@ -23,6 +23,12 @@
+ 
+ #include <errno.h>
+ #include <stdlib.h>
++#ifdef HAVE_MALLOC_H
++#include <malloc.h>
++#endif
++#ifdef HAVE_ALLOCA_H
++#include <alloca.h>
++#endif
+ #include <string.h>
+ 
+ #define MAX_FEATURE_COUNT 64 //FIXME
+@@ -501,9 +507,9 @@ static int model_collection_parse(json_stream *s, VmafModel **model,
+     if (!c.name) return -ENOMEM;
+ 
+     const size_t cfg_name_sz = strlen(name) + 5 + 1;
+-    char cfg_name[cfg_name_sz];
++    char *cfg_name = alloca(cfg_name_sz);
+ 
+-    const size_t generated_key_sz = 4 + 1;
++    enum { generated_key_sz = 4 + 1 };
+     char generated_key[generated_key_sz];
+ 
+     unsigned i = 0;
+diff --git a/libvmaf/test/test_cambi.c b/libvmaf/test/test_cambi.c
+index eff5c12..dc50a7d 100644
+--- a/libvmaf/test/test_cambi.c
++++ b/libvmaf/test/test_cambi.c
+@@ -258,7 +258,7 @@ static char *test_decimate_generic()
+ static char *test_filter_mode()
+ {
+     VmafPicture filtered_image, image;
+-    unsigned w = 5, h = 5;
++    enum { w = 5, h = 5 };
+     uint16_t buffer[3 * w];
+ 
+     int err = 0;
+diff --git a/libvmaf/test/test_feature_extractor.c b/libvmaf/test/test_feature_extractor.c
+index aac8a06..d822d79 100644
+--- a/libvmaf/test/test_feature_extractor.c
++++ b/libvmaf/test/test_feature_extractor.c
+@@ -56,7 +56,7 @@ static char *test_feature_extractor_context_pool()
+ {
+     int err = 0;
+ 
+-    const unsigned n_threads = 8;
++    enum { n_threads = 8 };
+     VmafFeatureExtractorContextPool *pool;
+     err = vmaf_fex_ctx_pool_create(&pool, n_threads);
+     mu_assert("problem during vmaf_fex_ctx_pool_create", !err);
+diff --git a/libvmaf/tools/vmaf.c b/libvmaf/tools/vmaf.c
+index 4c1583a..03e1cff 100644
+--- a/libvmaf/tools/vmaf.c
++++ b/libvmaf/tools/vmaf.c
+@@ -1,6 +1,12 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <time.h>
++#ifdef HAVE_MALLOC_H
++#include <malloc.h> // alloca()
++#endif
++#ifdef HAVE_ALLOCA_H
++#include <alloca.h>
++#endif
+ #include <unistd.h>
+ 
+ #include "cli_parse.h"
+@@ -217,7 +223,7 @@ int main(int argc, char *argv[])
+     model_collection = malloc(model_sz);
+     memset(model_collection, 0, model_collection_sz);
+ 
+-    const char *model_collection_label[c.model_cnt];
++    const char **model_collection_label = alloca(c.model_cnt * sizeof(*model_collection_label));
+     unsigned model_collection_cnt = 0;
+ 
+     for (unsigned i = 0; i < c.model_cnt; i++) {
+-- 
+2.50.1 (Apple Git-155)
+

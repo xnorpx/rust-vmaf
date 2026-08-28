@@ -23,6 +23,12 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#ifdef HAVE_MALLOC_H
+#include <malloc.h>
+#endif
+#ifdef HAVE_ALLOCA_H
+#include <alloca.h>
+#endif
 #include <string.h>
 
 #define MAX_FEATURE_COUNT 64 //FIXME
@@ -501,32 +507,30 @@ static int model_collection_parse(json_stream *s, VmafModel **model,
     if (!c.name) return -ENOMEM;
 
     const size_t cfg_name_sz = strlen(name) + 5 + 1;
-    char *cfg_name = malloc(cfg_name_sz);
-    if (!cfg_name) {
-        free((char*)name);
-        return -ENOMEM;
-    }
+    char *cfg_name = alloca(cfg_name_sz);
 
-    char generated_key[5];
+    enum { generated_key_sz = 4 + 1 };
+    char generated_key[generated_key_sz];
 
     unsigned i = 0;
     while (json_peek(s) != JSON_OBJECT_END && !json_get_error(s)) {
-        if (json_next(s) != JSON_STRING) goto cleanup;
+        if (json_next(s) != JSON_STRING)
+            return -EINVAL;
 
         const char *key = json_get_string(s, NULL);
-        snprintf(generated_key, sizeof(generated_key), "%d", i);
+        snprintf(generated_key, generated_key_sz, "%d", i);
 
         if (!strcmp(key, generated_key)) {
             VmafModel *m;
             err = vmaf_read_json_model(&m, &c, s);
-            if (err) goto cleanup;
+            if (err) return err;
 
             if (i == 0) {
                 *model = m;
                 c.name = cfg_name;
             } else {
                 err = vmaf_model_collection_append(model_collection, m);
-                if (err) goto cleanup;
+                if (err) return err;
             }
 
             sprintf((char*)c.name, "%s_%04d", name, ++i);
@@ -536,11 +540,8 @@ static int model_collection_parse(json_stream *s, VmafModel **model,
         json_skip(s);
     }
 
-    if (!(*model_collection)) err = -EINVAL;
-
-cleanup:
-    free(cfg_name);
     free((char*)name);
+    if (!(*model_collection)) return -EINVAL;
     return err;
 }
 

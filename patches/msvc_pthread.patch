@@ -1,13 +1,14 @@
 diff --git a/libvmaf/meson.build b/libvmaf/meson.build
-index ac5bf61e932b7d78d5847454b5178c51cef913ce..869e557421e5ba58eba2a03297e0b3340d372423 100644
+index 9ae15b742eed8d1f44f69806fc88781bcae7bb7a..be5594c1723adeadea276c4a957fb5393e0d0a08 100644
 --- a/libvmaf/meson.build
 +++ b/libvmaf/meson.build
-@@ -29,13 +29,18 @@ elif host_machine.system() == 'darwin'
+@@ -36,13 +36,19 @@ if cc.has_header('alloca.h', args: test_args)
+     add_project_arguments('-DHAVE_ALLOCA_H', language: ['c', 'cpp'])
  endif
  
- # Header checks
 +msvc_compat_dependency = []
 +if cc.get_id() == 'msvc'
++    add_project_arguments('-D_USE_MATH_DEFINES', language: ['c', 'cpp'])
 +    msvc_compat_dependency = declare_dependency(
 +        include_directories : include_directories('src/compat/msvc'),
 +    )
@@ -228,65 +229,6 @@ index 5a1ea7d8f6474844cbf7e14d3c3b7cce3244bcaa..925b2233412f66665581d5b7468a932a
  #if ARCH_X86
  #include "x86/adm_avx2.h"
  #if HAVE_AVX512
-diff --git a/libvmaf/src/feature/integer_vif.c b/libvmaf/src/feature/integer_vif.c
-index b3a6a89ee667b1d4c895bbfa79e9de783a00e0a3..cff6e235ae09cc8f70e0bd92d54a792f13a8e6e5 100644
---- a/libvmaf/src/feature/integer_vif.c
-+++ b/libvmaf/src/feature/integer_vif.c
-@@ -637,27 +637,28 @@ static int init(VmafFeatureExtractor *fex, enum VmafPixelFormat pix_fmt,
-     const size_t data_sz =
-         2 * (pad_size + frame_size + pad_size) + 2 * (h * s->public.buf.stride_16) +
-         5 * (s->public.buf.stride_32) + 7 * s->public.buf.stride_tmp;
--    void *data = aligned_malloc(data_sz, MAX_ALIGN);
--    if (!data) return -ENOMEM;
--    memset(data, 0, data_sz);
-+    void *allocation = aligned_malloc(data_sz, MAX_ALIGN);
-+    if (!allocation) return -ENOMEM;
-+    memset(allocation, 0, data_sz);
-+    uint8_t *data = allocation;
- 
-     s->public.buf.data = data; data += pad_size;
-     s->public.buf.ref = data; data += frame_size + pad_size + pad_size;
-     s->public.buf.dis = data; data += frame_size + pad_size;
--    s->public.buf.mu1 = data; data += h * s->public.buf.stride_16;
--    s->public.buf.mu2 = data; data += h * s->public.buf.stride_16;
--    s->public.buf.mu1_32 = data; data += s->public.buf.stride_32;
--    s->public.buf.mu2_32 = data; data += s->public.buf.stride_32;
--    s->public.buf.ref_sq = data; data += s->public.buf.stride_32;
--    s->public.buf.dis_sq = data; data += s->public.buf.stride_32;
--    s->public.buf.ref_dis = data; data += s->public.buf.stride_32;
--    s->public.buf.tmp.mu1 = data; data += s->public.buf.stride_tmp;
--    s->public.buf.tmp.mu2 = data; data += s->public.buf.stride_tmp;
--    s->public.buf.tmp.ref = data; data += s->public.buf.stride_tmp;
--    s->public.buf.tmp.dis = data; data += s->public.buf.stride_tmp;
--    s->public.buf.tmp.ref_dis = data; data += s->public.buf.stride_tmp;
--    s->public.buf.tmp.ref_convol = data; data += s->public.buf.stride_tmp;
--    s->public.buf.tmp.dis_convol = data;
-+    s->public.buf.mu1 = (uint16_t *)data; data += h * s->public.buf.stride_16;
-+    s->public.buf.mu2 = (uint16_t *)data; data += h * s->public.buf.stride_16;
-+    s->public.buf.mu1_32 = (uint32_t *)data; data += s->public.buf.stride_32;
-+    s->public.buf.mu2_32 = (uint32_t *)data; data += s->public.buf.stride_32;
-+    s->public.buf.ref_sq = (uint32_t *)data; data += s->public.buf.stride_32;
-+    s->public.buf.dis_sq = (uint32_t *)data; data += s->public.buf.stride_32;
-+    s->public.buf.ref_dis = (uint32_t *)data; data += s->public.buf.stride_32;
-+    s->public.buf.tmp.mu1 = (uint32_t *)data; data += s->public.buf.stride_tmp;
-+    s->public.buf.tmp.mu2 = (uint32_t *)data; data += s->public.buf.stride_tmp;
-+    s->public.buf.tmp.ref = (uint32_t *)data; data += s->public.buf.stride_tmp;
-+    s->public.buf.tmp.dis = (uint32_t *)data; data += s->public.buf.stride_tmp;
-+    s->public.buf.tmp.ref_dis = (uint32_t *)data; data += s->public.buf.stride_tmp;
-+    s->public.buf.tmp.ref_convol = (uint32_t *)data; data += s->public.buf.stride_tmp;
-+    s->public.buf.tmp.dis_convol = (uint32_t *)data;
- 
-     s->feature_name_dict =
-         vmaf_feature_name_dict_from_provided_features(fex->provided_features,
-@@ -667,7 +668,7 @@ static int init(VmafFeatureExtractor *fex, enum VmafPixelFormat pix_fmt,
-     return 0;
- 
- fail:
--    if (data) aligned_free(data);
-+    aligned_free(allocation);
-     vmaf_dictionary_free(&s->feature_name_dict);
-     return -ENOMEM;
- }
 diff --git a/libvmaf/src/feature/integer_vif.h b/libvmaf/src/feature/integer_vif.h
 index 42b4108b4bc715b80f1b93e0fe498e4f7be97026..c565e605a9b496c6695019d69c02e2fd7942ee53 100644
 --- a/libvmaf/src/feature/integer_vif.h
@@ -324,30 +266,8 @@ index 02371fb571dbcd6ad00ef03269e5eb93752e15ca..d2bb3de04f1c67f0bbdb8b3f6eaceb5d
  /*
   * Recursively `mkdir(path, mode)`
   */
-diff --git a/libvmaf/src/libvmaf.c b/libvmaf/src/libvmaf.c
-index f914ddaa27a314e2e0d3e397968e8520263d40db..b365943a5f10e36e0f4a31b1c831bf8fe91c56cd 100644
---- a/libvmaf/src/libvmaf.c
-+++ b/libvmaf/src/libvmaf.c
-@@ -1093,7 +1093,8 @@ int vmaf_score_pooled_model_collection(VmafContext *vmaf,
-     const char *suffix_stddev = "_stddev";
-     const size_t name_sz =
-         strlen(model_collection->name) + strlen(suffix_lo) + 1;
--    char name[name_sz];
-+    char *name = malloc(name_sz);
-+    if (!name) return -ENOMEM;
-     memset(name, 0, name_sz);
- 
-     snprintf(name, name_sz, "%s%s", model_collection->name, suffix_bagging);
-@@ -1116,6 +1117,7 @@ int vmaf_score_pooled_model_collection(VmafContext *vmaf,
-                                      &score->bootstrap.ci.p95.hi,
-                                      index_low, index_high);
- 
-+    free(name);
-     return err;
- }
- 
 diff --git a/libvmaf/src/meson.build b/libvmaf/src/meson.build
-index 6900c572d9edfa0f17312d1e84046ccc0c83d396..b6827faa7e2895f3acb474eb3e301fa5054aa964 100644
+index 6900c572d9edfa0f17312d1e84046ccc0c83d396..b19bc98f43629dc13737bef86b41bf0c41b70ec0 100644
 --- a/libvmaf/src/meson.build
 +++ b/libvmaf/src/meson.build
 @@ -548,7 +548,11 @@ libvmaf_feature_static_lib = static_library(
@@ -367,125 +287,10 @@ index 6900c572d9edfa0f17312d1e84046ccc0c83d396..b6827faa7e2895f3acb474eb3e301fa5
        thread_lib,
        math_lib,
        stdatomic_dependency,
-+    msvc_compat_dependency,
++            msvc_compat_dependency,
        cuda_dependency,
 -	  rev_dep
-+    rev_dep,
++            rev_dep,
      ],
      objects : [
          platform_specific_cpu_objects,
-diff --git a/libvmaf/src/predict.c b/libvmaf/src/predict.c
-index 93f163fb41fa04cea4e5adcde5de5a3fbd84b30b..295b027a9f6231130a86a0f04fb90284038a827e 100644
---- a/libvmaf/src/predict.c
-+++ b/libvmaf/src/predict.c
-@@ -444,7 +444,9 @@ static int vmaf_bootstrap_predict_score_at_index(
-                                         VmafModelCollectionScore *score)
- {
-     int err = 0;
--    double scores[model_collection->cnt];
-+    double *scores = malloc(sizeof(*scores) * model_collection->cnt);
-+    char *name = NULL;
-+    if (!scores) return -ENOMEM;
- 
-     for (unsigned i = 0; i < model_collection->cnt; i++) {
-         // mean, stddev, etc. are calculated on untransformed/unclipped scores
-@@ -456,7 +458,7 @@ static int vmaf_bootstrap_predict_score_at_index(
-                                           feature_collector, index,
-                                           &scores[i], false,
-                                           false, flags);
--        if (err) return err;
-+        if (err) goto cleanup;
- 
-         // do not override the model's transform/clip behavior
-         // write the scores to the feature collector
-@@ -464,7 +466,7 @@ static int vmaf_bootstrap_predict_score_at_index(
-         err = vmaf_predict_score_at_index(model_collection->model[i],
-                                           feature_collector, index,
-                                           &score, true, false, 0);
--        if (err) return err;
-+        if (err) goto cleanup;
-     }
- 
-     score->type = VMAF_MODEL_COLLECTION_SCORE_BOOTSTRAP;
-@@ -510,7 +512,11 @@ static int vmaf_bootstrap_predict_score_at_index(
-     const char *suffix_stddev = "_stddev";
-     const size_t name_sz =
-         strlen(model_collection->name) + strlen(suffix_lo) + 1;
--    char name[name_sz];
-+    name = malloc(name_sz);
-+    if (!name) {
-+        err = -ENOMEM;
-+        goto cleanup;
-+    }
-     memset(name, 0, name_sz);
- 
-     snprintf(name, name_sz, "%s%s", model_collection->name, suffix_bagging);
-@@ -529,6 +535,10 @@ static int vmaf_bootstrap_predict_score_at_index(
-     err |= vmaf_feature_collector_append(feature_collector, name,
-                                          score->bootstrap.ci.p95.hi,
-                                          index);
-+
-+cleanup:
-+    free(name);
-+    free(scores);
-     return err;
- }
- 
-diff --git a/libvmaf/src/read_json_model.c b/libvmaf/src/read_json_model.c
-index cea8438eb36a7ff84a76b332b78532ec55ff430f..1c2986b75783ee62cfced53f91b136169511264f 100644
---- a/libvmaf/src/read_json_model.c
-+++ b/libvmaf/src/read_json_model.c
-@@ -501,30 +501,32 @@ static int model_collection_parse(json_stream *s, VmafModel **model,
-     if (!c.name) return -ENOMEM;
- 
-     const size_t cfg_name_sz = strlen(name) + 5 + 1;
--    char cfg_name[cfg_name_sz];
-+    char *cfg_name = malloc(cfg_name_sz);
-+    if (!cfg_name) {
-+        free((char*)name);
-+        return -ENOMEM;
-+    }
- 
--    const size_t generated_key_sz = 4 + 1;
--    char generated_key[generated_key_sz];
-+    char generated_key[5];
- 
-     unsigned i = 0;
-     while (json_peek(s) != JSON_OBJECT_END && !json_get_error(s)) {
--        if (json_next(s) != JSON_STRING)
--            return -EINVAL;
-+        if (json_next(s) != JSON_STRING) goto cleanup;
- 
-         const char *key = json_get_string(s, NULL);
--        snprintf(generated_key, generated_key_sz, "%d", i);
-+        snprintf(generated_key, sizeof(generated_key), "%d", i);
- 
-         if (!strcmp(key, generated_key)) {
-             VmafModel *m;
-             err = vmaf_read_json_model(&m, &c, s);
--            if (err) return err;
-+            if (err) goto cleanup;
- 
-             if (i == 0) {
-                 *model = m;
-                 c.name = cfg_name;
-             } else {
-                 err = vmaf_model_collection_append(model_collection, m);
--                if (err) return err;
-+                if (err) goto cleanup;
-             }
- 
-             sprintf((char*)c.name, "%s_%04d", name, ++i);
-@@ -534,8 +536,11 @@ static int model_collection_parse(json_stream *s, VmafModel **model,
-         json_skip(s);
-     }
- 
-+    if (!(*model_collection)) err = -EINVAL;
-+
-+cleanup:
-+    free(cfg_name);
-     free((char*)name);
--    if (!(*model_collection)) return -EINVAL;
-     return err;
- }
- 
