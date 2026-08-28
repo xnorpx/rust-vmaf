@@ -140,7 +140,7 @@ fn build_vmaf() -> Result<(), Box<dyn std::error::Error>> {
             }
             println!("cargo:rustc-link-lib=c++_shared");
         }
-        ("windows", "msvc") => println!("cargo:rustc-link-lib=msvcp140"),
+        ("windows", "msvc") => {}
         ("windows", _) => println!("cargo:rustc-link-lib=stdc++"),
         _ => println!("cargo:rustc-link-lib=stdc++"),
     }
