@@ -196,18 +196,16 @@ index 979ee2ba8234489c23c65478720c41bd7bfa5f91..7540775fd71a9510e80968c727ab5957
  
 diff --git a/libvmaf/src/compat/msvc/unistd.h b/libvmaf/src/compat/msvc/unistd.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..9979fff0a4d836817806d9aacd07e996c36cb4e3
+index 0000000000000000000000000000000000000000..6269ebda300df183de51b2d6e90ce9eb2d485ba0
 --- /dev/null
 +++ b/libvmaf/src/compat/msvc/unistd.h
-@@ -0,0 +1,14 @@
+@@ -0,0 +1,12 @@
 +#ifndef VMAF_MSVC_UNISTD_H
 +#define VMAF_MSVC_UNISTD_H
 +
 +#include <direct.h>
 +#include <io.h>
 +#include <sys/types.h>
-+
-+typedef int mode_t;
 +
 +#define fileno _fileno
 +#define isatty _isatty
@@ -311,6 +309,21 @@ index 42b4108b4bc715b80f1b93e0fe498e4f7be97026..c565e605a9b496c6695019d69c02e2fd
  #endif
  
  static inline int32_t log2_32(const uint16_t *log2_table, uint32_t temp)
+diff --git a/libvmaf/src/feature/mkdirp.h b/libvmaf/src/feature/mkdirp.h
+index 02371fb571dbcd6ad00ef03269e5eb93752e15ca..d2bb3de04f1c67f0bbdb8b3f6eaceb5d1efd5fbe 100644
+--- a/libvmaf/src/feature/mkdirp.h
++++ b/libvmaf/src/feature/mkdirp.h
+@@ -12,6 +12,10 @@
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ 
++#ifdef _MSC_VER
++typedef int mode_t;
++#endif
++
+ /*
+  * Recursively `mkdir(path, mode)`
+  */
 diff --git a/libvmaf/src/meson.build b/libvmaf/src/meson.build
 index 673e3608944da0e9e95ffc7b0c6c708076ab1712..144d65917c3cd22b222dbffc36a782cac7f937f1 100644
 --- a/libvmaf/src/meson.build
