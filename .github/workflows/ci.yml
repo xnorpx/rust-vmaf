@@ -111,6 +111,35 @@ jobs:
       - name: Build and test
         run: cargo test --target x86_64-pc-windows-gnu --verbose
 
+  build-windows-msvc:
+    name: Windows x86_64 (MSVC)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Install native dependencies
+        run: |
+          python -m pip install meson ninja
+          choco install nasm --no-progress -y
+          'C:\Program Files\Git\usr\bin' | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build and test
+        run: cargo test --target x86_64-pc-windows-msvc --verbose
+
   build-ios:
     name: iOS compile and link
     runs-on: macos-latest
