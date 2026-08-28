@@ -580,7 +580,7 @@ static void vif_scale_frame_bicubic_s(const float *src, float *dst,
                                       int dst_w, int dst_h, int dst_stride) {
     // if the input and output sizes are the same
     if (src_w == dst_w && src_h == dst_h) {
-        memcpy(dst, src, dst_stride * dst_h * sizeof(float));
+        memcpy(dst, src, (size_t)dst_stride * dst_h * sizeof(float));
         return;
     }
 
@@ -641,7 +641,7 @@ static void vif_scale_frame_lanczos4_s(const float *src, float *dst,
                                       int dst_w, int dst_h, int dst_stride) {
     // if the input and output sizes are the same
     if (src_w == dst_w && src_h == dst_h) {
-        memcpy(dst, src, dst_stride * dst_h * sizeof(float));
+        memcpy(dst, src, (size_t)dst_stride * dst_h * sizeof(float));
         return;
     }
 
@@ -701,7 +701,7 @@ void vif_scale_frame_bilinear_precomputed_s(const float *src, float *dst,
                        const int *x1a, const int *x2a, const float *dxa) {
     // if the input and output sizes are the same
     if (src_w == dst_w && src_h == dst_h) {
-        memcpy(dst, src, dst_stride * dst_h * sizeof(float));
+        memcpy(dst, src, (size_t)dst_stride * dst_h * sizeof(float));
         return;
     }
 
@@ -714,7 +714,7 @@ static void vif_scale_frame_bilinear_s(const float *src, float *dst,
                        int dst_w, int dst_h, int dst_stride) {
     // if the input and output sizes are the same
     if (src_w == dst_w && src_h == dst_h) {
-        memcpy(dst, src, dst_stride * dst_h * sizeof(float));
+        memcpy(dst, src, (size_t)dst_stride * dst_h * sizeof(float));
         return;
     }
 
@@ -737,7 +737,7 @@ static void vif_scale_frame_nearest_s(const float *src, float *dst,
                        int dst_w, int dst_h, int dst_stride) {
     // if the input and output sizes are the same
     if (src_w == dst_w && src_h == dst_h) {
-        memcpy(dst, src, dst_stride * dst_h * sizeof(float));
+        memcpy(dst, src, (size_t)dst_stride * dst_h * sizeof(float));
         return;
     }
 
